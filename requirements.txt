@@ -1,0 +1,11 @@
+# Networking & Orchestration
+paho-mqtt==1.6.1
+numpy>=1.21.0
+
+# Stack A: Base Cryptography & AEAD
+cryptography>=41.0.0
+ascon==0.0.9
+
+# Stack B & C: Lightweight PRG Ciphers
+simonspeckciphers>=0.4.0
+present-cipher>=1.0.0
