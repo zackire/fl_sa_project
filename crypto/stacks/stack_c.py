@@ -1,5 +1,5 @@
 import os
-import ascon
+import gift_cofb  
 from typing import Dict
 from present_cipher import present as Present
 from crypto.interface import CryptoInterface
@@ -44,20 +44,24 @@ class Stack3Crypto(CryptoInterface):
         return bytes(mask_bytes[:mask_length])
 
     def encrypt_payload(self, target_client_id: str, payload: bytes, shared_secret: bytes) -> bytes:
-        ascon_key = shared_secret[:16] 
+        gift_key = shared_secret[:16] 
         nonce = os.urandom(16)
-        ciphertext = ascon.encrypt(self.key, self.nonce, self.ad, plaintext, variant="Ascon-128")
+        ad = b"" 
+        
+        ciphertext = gift_cofb.encrypt(payload, ad, gift_key, nonce)
         return nonce + ciphertext
 
     def decrypt_payload(self, source_client_id: str, ciphertext: bytes, shared_secret: bytes) -> bytes:
-        ascon_key = shared_secret[:16]
+        gift_key = shared_secret[:16]
         nonce = ciphertext[:16]
         actual_ciphertext = ciphertext[16:]
-        plaintext = ascon.decrypt(self.key, self.nonce, self.ad, ciphertext, variant="Ascon-128")
+        ad = b""
         
-        if plaintext is None:
+        try:
+            plaintext = gift_cofb.decrypt(actual_ciphertext, ad, gift_key, nonce)
+            return plaintext
+        except Exception:
             raise ValueError("Authentication tag verification failed.")
-        return plaintext
 
     def get_private_masking_key(self) -> bytes:
         return self._sSK.private_bytes_raw()
