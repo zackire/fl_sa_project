@@ -1,4 +1,4 @@
-# Project Documentation: Federated Learning with Secure Aggregation (FL-SA)
+# Federated Learning with Secure Aggregation (FL-SA)
 
 This repository provides a complete framework for implementing **Federated Learning (FL)** enhanced by **Secure Aggregation (SA)** protocols. It is designed to facilitate decentralized machine learning where data privacy is maintained through cryptographic masking and secure multi-party computation.
 
