@@ -2,6 +2,10 @@
 paho-mqtt==1.6.1
 numpy>=1.21.0
 
+# Protocol & ML Core Utilities
+scikit-learn>=1.0.0
+pycryptodome>=3.15.0
+
 # Stack A: Base Cryptography & AEAD
 cryptography>=41.0.0
 ascon==0.0.9

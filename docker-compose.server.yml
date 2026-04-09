@@ -1,0 +1,23 @@
+services:
+  mqtt-broker:
+    image: eclipse-mosquitto:latest
+    container_name: fl_mosquitto_broker
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    restart: unless-stopped
+
+  fl-server:
+    build: 
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: fl_server
+    depends_on:
+      - mqtt-broker
+    environment:
+      - EXPECTED_K=${EXPECTED_K:?ERROR: Please run ./start_server.sh instead of docker-compose directly!}
+      - THRESHOLD_T=${THRESHOLD_T:?ERROR: You must provide THRESHOLD_T}
+      - CRYPTO_STACK=${CRYPTO_STACK:?ERROR: You must provide a CRYPTO_STACK}
+    command: ["sh", "-c", "python main_server.py --ip mqtt-broker --k $${EXPECTED_K} --t $${THRESHOLD_T} --stack $${CRYPTO_STACK}"]
+    restart: on-failure

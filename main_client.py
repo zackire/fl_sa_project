@@ -15,8 +15,8 @@ from fl_core.dataset import load_local_data
 def main():
     parser = argparse.ArgumentParser(description="FL Secure Aggregation Client")
     parser.add_argument("--id", type=str, required=True, help="Unique Client ID (e.g., client_1)")
-    parser.add_argument("--ip", type=str, default="localhost", help="MQTT Broker IP")
-    parser.add_argument("--stack", type=str, default="A", choices=["A", "B", "C"], help="Crypto Stack")
+    parser.add_argument("--ip", type=str, required=True, help="MQTT Broker IP")
+    parser.add_argument("--stack", type=str, required=True, choices=["A", "B", "C"], help="Crypto Stack")
     args = parser.parse_args()
     logger = setup_custom_logger(args.id)
 

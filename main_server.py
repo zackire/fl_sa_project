@@ -9,10 +9,10 @@ from crypto.stacks.stack_c import Stack3Crypto
 
 def main():
     parser = argparse.ArgumentParser(description="FL Secure Aggregation Server")
-    parser.add_argument("--ip", type=str, default="localhost", help="MQTT Broker IP")
-    parser.add_argument("--k", type=int, default=3, help="Expected number of clients (K)")
-    parser.add_argument("--t", type=int, default=2, help="Threshold of surviving clients (T)")
-    parser.add_argument("--stack", type=str, default="A", choices=["A", "B", "C"], help="Crypto Stack")
+    parser.add_argument("--ip", type=str, required=True, help="MQTT Broker IP")
+    parser.add_argument("--k", type=int, required=True, help="Expected number of clients (K)")
+    parser.add_argument("--t", type=int, required=True, help="Threshold of surviving clients (T)")
+    parser.add_argument("--stack", type=str, required=True, choices=["A", "B", "C"], help="Crypto Stack")
     args = parser.parse_args()
     logger = setup_custom_logger("server")
 
