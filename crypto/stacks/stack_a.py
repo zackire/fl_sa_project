@@ -10,6 +10,7 @@ class Stack1Crypto(CryptoInterface):
         self._cSK = None
         self._sSK = None
 
+# X25519 - KEY EXCHANGE
     def generate_keypairs(self) -> Dict[str, bytes]:
         try:
             self._cSK = x25519.X25519PrivateKey.generate()
@@ -28,26 +29,30 @@ class Stack1Crypto(CryptoInterface):
             shared_secrets[target_id] = self._cSK.exchange(target_cPK)
         return shared_secrets
 
+# CHACHA20 - PRG MASK GENERATION
     def generate_prg_mask(self, shared_secret: bytes, mask_length: int) -> bytes:
-        nonce = b'\x00' * 16 
-        cipher = Cipher(algorithms.ChaCha20(shared_secret, nonce), mode=None)
+        chacha_key = shared_secret 
+        nonce = b'\x00' * 16  
+        
+        cipher = Cipher(algorithms.ChaCha20(chacha_key, nonce), mode=None) 
         encryptor = cipher.encryptor()
-        return encryptor.update(b'\x00' * mask_length)
+        
+        return encryptor.update(b'\x00' * mask_length) 
 
+# ASCON - PAYLOAD ENCRYPTION
     def encrypt_payload(self, target_client_id: str, payload: bytes, shared_secret: bytes) -> bytes:
         ascon_key = shared_secret[:16] 
         nonce = os.urandom(16)
-        # Instead of ascon.ascon_encrypt(...)
-        ciphertext = ascon.encrypt(self.key, self.nonce, self.ad, plaintext, variant="Ascon-128")
+        
+        ciphertext = ascon.ascon_encrypt(ascon_key, nonce, b"", payload, variant="Ascon-128")
         return nonce + ciphertext
 
-    # FIX: Renamed encrypted_data to ciphertext
     def decrypt_payload(self, source_client_id: str, ciphertext: bytes, shared_secret: bytes) -> bytes:
         ascon_key = shared_secret[:16]
         nonce = ciphertext[:16]
         actual_ciphertext = ciphertext[16:]
-        # Instead of ascon.ascon_decrypt(...)
-        plaintext = ascon.decrypt(self.key, self.nonce, self.ad, ciphertext, variant="Ascon-128")
+        
+        plaintext = ascon.ascon_decrypt(ascon_key, nonce, b"", actual_ciphertext, variant="Ascon-128")
         if plaintext is None:
             raise ValueError("Authentication tag verification failed.")
         return plaintext

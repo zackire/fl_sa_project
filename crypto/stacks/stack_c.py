@@ -1,7 +1,7 @@
 import os
 import gift_cofb  
 from typing import Dict
-from present_cipher import present as Present
+from present import Present 
 from crypto.interface import CryptoInterface
 from cryptography.hazmat.primitives.asymmetric import x25519
 
@@ -10,6 +10,7 @@ class Stack3Crypto(CryptoInterface):
         self._cSK = None
         self._sSK = None
 
+#X25519 - KEY EXCHANGE
     def generate_keypairs(self) -> Dict[str, bytes]:
         try:
             self._cSK = x25519.X25519PrivateKey.generate()
@@ -29,21 +30,27 @@ class Stack3Crypto(CryptoInterface):
             shared_secrets[target_id] = self._cSK.exchange(target_cPK)
         return shared_secrets
 
+#PRESENT-128 - PRG MASK GENERATION
     def generate_prg_mask(self, shared_secret: bytes, mask_length: int) -> bytes:
-        present_key = shared_secret[:16]
+
+        present_key = shared_secret[:16] # PRESENT-128 uses a 16-byte key
         cipher = Present(present_key)
         
         mask_bytes = bytearray()
-        num_blocks = (mask_length + 7) // 8  
+        num_blocks = (mask_length + 7) // 8  # 8-byte blocks
         
         for counter in range(num_blocks):
+            # Convert counter to 8-byte block (64-bit)
             counter_block = counter.to_bytes(8, byteorder='big')
+            # Encrypt block to get keystream
             prg_block = cipher.encrypt(counter_block)
             mask_bytes.extend(prg_block)
         
         return bytes(mask_bytes[:mask_length])
-
+    
+#GIFT-COFB - AEAD ENCRYPTION
     def encrypt_payload(self, target_client_id: str, payload: bytes, shared_secret: bytes) -> bytes:
+
         gift_key = shared_secret[:16] 
         nonce = os.urandom(16)
         ad = b"" 
