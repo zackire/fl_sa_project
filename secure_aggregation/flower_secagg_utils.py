@@ -1,12 +1,16 @@
 import os
+import math
 from concurrent.futures import ThreadPoolExecutor
 from typing import cast
 
 import numpy as np
 from Crypto.Protocol.SecretSharing import Shamir
 from Crypto.Util.Padding import pad, unpad
+from crypto.interface import CryptoInterface 
 
-# --- Shamir Secret Sharing ---
+# ------------ Flower framework Source Code Starts ------------
+
+# --- Shamir's Secret Sharing Scheme (SSSS) ---
 
 def create_shares(secret: bytes, threshold: int, num: int) -> list[bytes]:
     """Return a list of shares (bytes)."""
@@ -90,24 +94,54 @@ def dequantize(
         reverse_quantized_list.append(recon_arr)
     return reverse_quantized_list
 
+# ------------ Flower framework Source Code End ------------
+
+
+# ------------ Custom Secure Aggregation Adapter ------------
 
 # --- PRG Expansion ---
 
-def pseudo_rand_gen(
-    seed: bytes, num_range: int, dimensions_list: list[tuple[int, ...]]
+def generate_crypto_prg_mask(
+    crypto_stack: CryptoInterface,
+    shared_secret: bytes, 
+    num_range: int, 
+    dimensions_list: list[tuple[int, ...]]
 ) -> list[np.ndarray]:
-    """Seeded pseudo-random number generator for noise generation with Numpy."""
-    assert len(seed) & 0x3 == 0
-    seed32 = 0
-    for i in range(0, len(seed), 4):
-        seed32 ^= int.from_bytes(seed[i : i + 4], "little")
-    gen = np.random.RandomState(seed32)
-    output = []
-    for dimension in dimensions_list:
-        if len(dimension) == 0:
-            arr = np.array(gen.randint(0, num_range - 1), dtype=np.int64)
+    """
+    Cryptographically secure pseudo-random number generator for weight masking.
+    Maps the raw byte stream from the active CryptoStack into the required Numpy shapes.
+    """
+    # 1. Calculate the total number of parameters across all model layers
+    total_elements = 0
+    for dim in dimensions_list:
+        total_elements += math.prod(dim) if len(dim) > 0 else 1
+        
+    # 2. We use 8 bytes (64 bits) per parameter to map cleanly to np.int64
+    mask_length = int(total_elements * 8)
+    
+    # 3. Call the active cryptographic stack to generate raw keystream bytes
+    raw_mask_bytes = crypto_stack.generate_prg_mask(shared_secret, mask_length)
+    
+    # 4. Interpret the raw bytes as a flat 1D array of integers
+    flat_mask_array = np.frombuffer(raw_mask_bytes, dtype=np.int64)
+    
+    # 5. Apply the modulo operation to keep numbers within the secure finite field
+    # np.abs guarantees positive values for strict modulo arithmetic
+    flat_mask_array = np.abs(flat_mask_array) % num_range
+    
+    # 6. Slice and reshape the flat array back into the original layer dimensions
+    output_tensors = []
+    current_idx = 0
+    for dim in dimensions_list:
+        if len(dim) == 0:
+            output_tensors.append(np.array(flat_mask_array[current_idx]))
+            current_idx += 1
         else:
-            arr = gen.randint(0, num_range - 1, dimension, dtype=np.int64)
+            num_items = math.prod(dim)
+            layer_mask = flat_mask_array[current_idx : current_idx + num_items].reshape(dim)
+            output_tensors.append(layer_mask)
+            current_idx += num_items
             
-        output.append(arr)
-    return output
+    return output_tensors
+
+# ------------ Custom Secure Aggregation Adapter End ------------

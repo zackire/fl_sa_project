@@ -2,7 +2,7 @@ import os
 import ascon
 from typing import Dict
 from crypto.interface import CryptoInterface
-from cryptography.hazmat.primitives.asymmetric import x25519
+from cryptography.hazmat.primitives.asymmetric import x25519 # type: ignore
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 
 class Stack1Crypto(CryptoInterface):
