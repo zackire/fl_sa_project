@@ -1,12 +1,11 @@
 import os
 import math
 from concurrent.futures import ThreadPoolExecutor
-from typing import cast
+from typing import List, Tuple
 
 import numpy as np
 from Crypto.Protocol.SecretSharing import Shamir
 from Crypto.Util.Padding import pad, unpad
-from crypto.interface import CryptoInterface 
 
 # ------------ Flower framework Source Code Starts ------------
 
@@ -97,51 +96,43 @@ def dequantize(
 # ------------ Flower framework Source Code End ------------
 
 
-# ------------ Custom Secure Aggregation Adapter ------------
+# ==========================================
+# CUSTOM SECURE AGGREGATION ADAPTERS
+# (Bridges the ML arrays and the CryptoInterface lists)
+# ==========================================
 
-# --- PRG Expansion ---
+def get_model_dimensions(parameters: List[np.ndarray]) -> List[Tuple[int, ...]]:
+    """Extracts the exact structural dimensions of the ML model."""
+    return [arr.shape for arr in parameters]
 
-def generate_crypto_prg_mask(
-    crypto_stack: CryptoInterface,
-    shared_secret: bytes, 
-    num_range: int, 
-    dimensions_list: list[tuple[int, ...]]
-) -> list[np.ndarray]:
+def flatten_ndarrays_to_list(parameters: List[np.ndarray]) -> List[float]:
     """
-    Cryptographically secure pseudo-random number generator for weight masking.
-    Maps the raw byte stream from the active CryptoStack into the required Numpy shapes.
+    Translates the ML multi-dimensional arrays into the flat 1D list 
+    required by the CryptoInterface.
     """
-    # 1. Calculate the total number of parameters across all model layers
-    total_elements = 0
-    for dim in dimensions_list:
-        total_elements += math.prod(dim) if len(dim) > 0 else 1
-        
-    # 2. We use 8 bytes (64 bits) per parameter to map cleanly to np.int64
-    mask_length = int(total_elements * 8)
-    
-    # 3. Call the active cryptographic stack to generate raw keystream bytes
-    raw_mask_bytes = crypto_stack.generate_prg_mask(shared_secret, mask_length)
-    
-    # 4. Interpret the raw bytes as a flat 1D array of integers
-    flat_mask_array = np.frombuffer(raw_mask_bytes, dtype=np.int64)
-    
-    # 5. Apply the modulo operation to keep numbers within the secure finite field
-    # np.abs guarantees positive values for strict modulo arithmetic
-    flat_mask_array = np.abs(flat_mask_array) % num_range
-    
-    # 6. Slice and reshape the flat array back into the original layer dimensions
+    flat_list = []
+    for arr in parameters:
+        flat_list.extend(arr.flatten().tolist())
+    return flat_list
+
+def reshape_list_to_ndarrays(flat_vector: List[float], dimensions: List[Tuple[int, ...]]) -> List[np.ndarray]:
+    """
+    Reconstructs the flat cryptographic output back into the 
+    original multi-dimensional ML model structure.
+    """
     output_tensors = []
     current_idx = 0
-    for dim in dimensions_list:
+    
+    for dim in dimensions:
         if len(dim) == 0:
-            output_tensors.append(np.array(flat_mask_array[current_idx]))
+            # Handles scalar values
+            output_tensors.append(np.array(flat_vector[current_idx]))
             current_idx += 1
         else:
             num_items = math.prod(dim)
-            layer_mask = flat_mask_array[current_idx : current_idx + num_items].reshape(dim)
-            output_tensors.append(layer_mask)
+            layer_data = flat_vector[current_idx : current_idx + num_items]
+            reshaped_array = np.array(layer_data).reshape(dim)
+            output_tensors.append(reshaped_array)
             current_idx += num_items
             
     return output_tensors
-
-# ------------ Custom Secure Aggregation Adapter End ------------

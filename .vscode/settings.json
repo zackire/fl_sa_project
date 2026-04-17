@@ -1,0 +1,6 @@
+{
+    "cSpell.words": [
+        "frombuffer"
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:pyenv"
+}
