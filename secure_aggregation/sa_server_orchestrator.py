@@ -1,30 +1,39 @@
 import json
 import logging
-from crypto.interface import CryptoInterface
+import base64
+from typing import List, Dict
+
+# Machine Learning Logic
 from fl_core.fedavg_logic import aggregate
-from secure_aggregation.flower_secagg_utils import combine_shares, dequantize
+
+# Cryptography & Utilities
+from crypto.interface import CryptoInterface
+from cryptography.hazmat.primitives.asymmetric import x25519 # Required to re-derive dropped secrets
+from secure_aggregation.flower_secagg_utils import combine_shares, dequantize, reshape_list_to_ndarrays
 from communication.payload_builder import PayloadBuilder
 
 class SecureAggregationServer:
-    def __init__(self, mqtt_handler, t_threshold: int, expected_k: int, crypto_stack: CryptoInterface):
+    def __init__(self, mqtt_handler, t_threshold: int, expected_k: int, crypto_stack: CryptoInterface, model_dimensions):
         self.mqtt = mqtt_handler
         self.t_threshold = t_threshold
         self.expected_k = expected_k
         self.crypto = crypto_stack 
+        self.model_dimensions = model_dimensions # Required to reshape the final sum
         
+        # Network & Protocol State
         self.active_clients = set()
-        self.public_keys_registry = {}
-        self.encrypted_shares_routing_table = {}
-        self.masked_weights_pool = []
         self.surviving_clients = set()
+        self.public_keys_registry = {}
         
+        # Round 2 & 3 Data Pools
         self._known_mask_length = None 
+        self.y_u_payloads: Dict[str, List[float]] = {}
+        self.b_u_shares_pool: Dict[str, List[bytes]] = {}
+        self.s_sk_shares_pool: Dict[str, List[bytes]] = {}
 
     def process_mqtt_message(self, topic: str, payload: str):
         data = json.loads(payload)
         
-        # Topic structure is ci_fl/epoch/round/client_id/target (tx/broadcast)
-        # Therefore, client_id is at index -2, not -1
         try:
             client_id = topic.split('/')[-2]
             
@@ -33,72 +42,155 @@ class SecureAggregationServer:
             elif "round_2" in topic: self._execute_round_2(client_id, data)
             elif "round_3" in topic: self._execute_round_3(client_id, data)
         except Exception as e:
-            logging.error(f"Server-side execution failure for topic {topic}: {e}")
+            logging.error(f"[Server] Execution failure for topic {topic}: {e}")
 
-    def _execute_round_0(self, client_id, data):
-        # Guard Clause: Ensuring public keys exist in the payload
+    # ==========================================
+    # ROUND 0: REGISTRY COLLECTION
+    # ==========================================
+    def _execute_round_0(self, client_id: str, data: dict):
         if "public_keys" not in data:
             return
             
-        # Store only the keys dictionary, bypassing the 'public_keys' wrapper
         self.public_keys_registry[client_id] = data["public_keys"]
         self.active_clients.add(client_id)
         
-        logging.info(f"[Server] Received public keys from {client_id}. Expected: {len(self.public_keys_registry)}/{self.expected_k}")
-        if len(self.public_keys_registry) == self.expected_k:
-            logging.info(f"[Server] Broadcasting public keys registry for Round 1...")
-            payload = json.dumps({"all_public_keys": self.public_keys_registry, "t_threshold": self.t_threshold})
-            # Broadcast topic for Round 1
+        logging.info(f"[Server] Received keys from {client_id}. ({len(self.active_clients)}/{self.expected_k})")
+        
+        # When all expected clients register, broadcast the directory
+        if len(self.active_clients) == self.expected_k:
+            logging.info(f"[Server] Quorum reached. Broadcasting public keys registry for Round 1...")
+            payload = json.dumps({
+                "all_public_keys": self.public_keys_registry, 
+                "t_threshold": self.t_threshold
+            })
             topic = PayloadBuilder.build_topic(epoch=1, round_num=1, sender_id="server", is_broadcast=True)
             self.mqtt.publish(topic, payload)
 
-    def _execute_round_1(self, client_id, data):
-        # Guard Clause
+    # ==========================================
+    # ROUND 1: THE POSTMASTER (ROUTING SHARES)
+    # ==========================================
+    def _execute_round_1(self, source_client_id: str, data: dict):
         if "encrypted_shares" not in data:
             return
             
-        self.encrypted_shares_routing_table[client_id] = data["encrypted_shares"]
+        # The Server acts purely as a router here. It cannot decrypt the shares.
+        encrypted_shares = data["encrypted_shares"]
         
-        if len(self.encrypted_shares_routing_table) == self.expected_k:
-            logging.info(f"[Server] Generating round 2 routing tables...")
-            for target_client in self.active_clients:
-                # Placeholder for active routing table generation logic
-                payload = {"global_weights": [], "X_train": [], "y_train": []}
-                # Uniquely identifiable transmit topic
-                topic = PayloadBuilder.build_topic(epoch=1, round_num=2, sender_id=target_client, is_broadcast=False)
-                self.mqtt.publish(topic, json.dumps(payload))
+        for target_client_id, ciphertext_b64 in encrypted_shares.items():
+            routed_payload = json.dumps({
+                "source_id": source_client_id,
+                "ciphertext": ciphertext_b64
+            })
+            # Forward directly to the specific client's receiving topic
+            topic = f"ci_fl/epoch_1/round_1/shares/{target_client_id}"
+            self.mqtt.publish(topic, routed_payload)
+            
+        # Mock trigger for transitioning to Round 2
+        # (In a real system, you track exactly how many shares were routed before starting Round 2)
+        if len(self.active_clients) == self.expected_k: 
+            self._trigger_round_2()
 
-    def _execute_round_2(self, client_id, data):
-        # Guard Clause
-        if "masked_weights" not in data or "mask_length" not in data:
+    def _trigger_round_2(self):
+        logging.info(f"[Server] Share routing complete. Initiating Round 2 (Training)...")
+        # In actual deployment, global weights are retrieved from the local model
+        payload = json.dumps({"global_weights": [], "X_train": [], "y_train": []})
+        topic = PayloadBuilder.build_topic(epoch=1, round_num=2, sender_id="server", is_broadcast=True)
+        self.mqtt.publish(topic, payload)
+
+    # ==========================================
+    # ROUND 2: MASKED INPUT COLLECTION
+    # ==========================================
+    def _execute_round_2(self, client_id: str, data: dict):
+        if "masked_weights" not in data:
             return
             
-        self.masked_weights_pool.append(data['masked_weights'])
+        self.y_u_payloads[client_id] = data['masked_weights']
         self.surviving_clients.add(client_id)
         
         if self._known_mask_length is None:
-            self._known_mask_length = data['mask_length']
+            self._known_mask_length = len(data['masked_weights'])
         
+        # When the threshold is met (or a timer expires), lock the round and demand unmasking shares
         if len(self.surviving_clients) >= self.t_threshold:
-            dropped_clients = self.active_clients - self.surviving_clients
-            payload = {"dropped_clients": list(dropped_clients)}
-            topic = PayloadBuilder.build_topic(epoch=1, round_num=3, sender_id="server", is_broadcast=True)
-            self.mqtt.publish(topic, json.dumps(payload))
+            self._trigger_round_3()
 
-    def _execute_round_3(self, client_id, data):
-        # Guard Clause
-        if "recovery_payload" not in data:
+    def _trigger_round_3(self):
+        logging.info(f"[Server] Round 2 complete. {len(self.surviving_clients)} survivors. Requesting recovery shares...")
+        payload = json.dumps({"surviving_clients": list(self.surviving_clients)})
+        topic = PayloadBuilder.build_topic(epoch=1, round_num=3, sender_id="server", is_broadcast=True)
+        self.mqtt.publish(topic, payload)
+
+    # ==========================================
+    # ROUND 3: UNMASKING & DROPOUT RECOVERY
+    # ==========================================
+    def _execute_round_3(self, client_id: str, data: dict):
+        if "b_u_shares" not in data or "s_sk_shares" not in data:
             return
             
-        if hasattr(self, '_store_recovery_shares'):
-            self._store_recovery_shares(data['recovery_payload'])
+        # 1. Collect and Decode Incoming Shares
+        for target_id, b64_share in data["b_u_shares"].items():
+            self.b_u_shares_pool.setdefault(target_id, []).append(base64.b64decode(b64_share))
             
-        if hasattr(self, '_have_enough_shares') and self._have_enough_shares(self.t_threshold):
-            recovered_keys = self._reconstruct_keys() if hasattr(self, '_reconstruct_keys') else []
+        for target_id, b64_share in data["s_sk_shares"].items():
+            self.s_sk_shares_pool.setdefault(target_id, []).append(base64.b64decode(b64_share))
             
-            reconstructed_masks = []
-            for r_key in recovered_keys:
-                mask = self.crypto.generate_prg_mask(shared_secret=r_key, mask_length=self._known_mask_length)
-                reconstructed_masks.append(mask)
+        # 2. Check if we have enough shares to proceed with final unmasking
+        # (Requires at least `t_threshold` shares from `t_threshold` clients)
+        # Assuming true for this execution flow:
+        if len(self.b_u_shares_pool) >= len(self.surviving_clients): 
+            self._finalize_aggregation()
+
+    def _finalize_aggregation(self):
+        logging.info("[Server] Threshold reached. Executing final unmasking cryptography...")
+        
+        # 1. Sum all received Y_u vectors
+        final_sum = [sum(x) for x in zip(*self.y_u_payloads.values())]
+        
+        # 2. Cancel Survivor Self-Masks (b_u)
+        
+        for survivor_id in self.surviving_clients:
+            shares = self.b_u_shares_pool[survivor_id][:self.t_threshold]
+            b_u_seed = combine_shares(shares)
             
-            self.mqtt.publish("ci_fl/baseline/global_model/tx", "new_model_payload")
+            # Regenerate the self-mask via the crypto stack interface
+            b_u_vector = self.crypto.generate_self_mask(b_u_seed, self._known_mask_length)
+            
+            # Vector Subtraction
+            final_sum = [y - b for y, b in zip(final_sum, b_u_vector)]
+
+        # 3. Cancel Dropped Client Pairwise Masks
+        dropped_clients = self.active_clients - self.surviving_clients
+        for dropped_id in dropped_clients:
+            shares = self.s_sk_shares_pool[dropped_id][:self.t_threshold]
+            s_sk_bytes = combine_shares(shares)
+            
+            # Instantiate the dropped client's private key to re-derive shared secrets
+            dropped_sSK = x25519.X25519PrivateKey.from_private_bytes(s_sk_bytes)
+            
+            dropped_shared_seeds = {}
+            for survivor_id in self.surviving_clients:
+                # Retrieve the survivor's public key from the Round 0 registry
+                survivor_sPK_bytes = base64.b64decode(self.public_keys_registry[survivor_id]["sPK"])
+                survivor_sPK = x25519.X25519PublicKey.from_public_bytes(survivor_sPK_bytes)
+                
+                # Perform ECDH to rebuild the missing seed
+                dropped_shared_seeds[survivor_id] = dropped_sSK.exchange(survivor_sPK)
+            
+            # Regenerate the pairwise masks via the crypto stack interface
+            pairwise_masks = self.crypto.generate_pairwise_masks(dropped_shared_seeds, self._known_mask_length)
+            
+            for survivor_id, mask_vector in pairwise_masks.items():
+                # Apply strictly opposite math to cancel out the mask exactly as it was added
+                sign = 1 if dropped_id > survivor_id else -1
+                final_sum = [y - (sign * m) for y, m in zip(final_sum, mask_vector)]
+                
+        logging.info("[Server] Cryptographic Unmasking Complete. Passing to FL Logic...")
+        
+        # 4. Translation & Machine Learning Hand-off
+        dequantized_flat_sum = dequantize([final_sum], clipping_range=10.0, target_range=2**24)[0]
+        final_model_ndarrays = reshape_list_to_ndarrays(dequantized_flat_sum, self.model_dimensions)
+        
+        # Average and apply via FedAvg
+        new_global_weights = aggregate([final_model_ndarrays])
+        
+        logging.info("[Server] Global model successfully updated.")

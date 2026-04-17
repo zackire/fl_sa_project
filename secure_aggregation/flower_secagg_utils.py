@@ -1,12 +1,15 @@
 import os
+import math
 from concurrent.futures import ThreadPoolExecutor
-from typing import cast
+from typing import List, Tuple
 
 import numpy as np
 from Crypto.Protocol.SecretSharing import Shamir
 from Crypto.Util.Padding import pad, unpad
 
-# --- Shamir Secret Sharing ---
+# ------------ Flower framework Source Code Starts ------------
+
+# --- Shamir's Secret Sharing Scheme (SSSS) ---
 
 def create_shares(secret: bytes, threshold: int, num: int) -> list[bytes]:
     """Return a list of shares (bytes)."""
@@ -90,24 +93,46 @@ def dequantize(
         reverse_quantized_list.append(recon_arr)
     return reverse_quantized_list
 
+# ------------ Flower framework Source Code End ------------
 
-# --- PRG Expansion ---
 
-def pseudo_rand_gen(
-    seed: bytes, num_range: int, dimensions_list: list[tuple[int, ...]]
-) -> list[np.ndarray]:
-    """Seeded pseudo-random number generator for noise generation with Numpy."""
-    assert len(seed) & 0x3 == 0
-    seed32 = 0
-    for i in range(0, len(seed), 4):
-        seed32 ^= int.from_bytes(seed[i : i + 4], "little")
-    gen = np.random.RandomState(seed32)
-    output = []
-    for dimension in dimensions_list:
-        if len(dimension) == 0:
-            arr = np.array(gen.randint(0, num_range - 1), dtype=np.int64)
+# ==========================================
+# CUSTOM SECURE AGGREGATION ADAPTERS
+# (Bridges the ML arrays and the CryptoInterface lists)
+# ==========================================
+
+def get_model_dimensions(parameters: List[np.ndarray]) -> List[Tuple[int, ...]]:
+    """Extracts the exact structural dimensions of the ML model."""
+    return [arr.shape for arr in parameters]
+
+def flatten_ndarrays_to_list(parameters: List[np.ndarray]) -> List[float]:
+    """
+    Translates the ML multi-dimensional arrays into the flat 1D list 
+    required by the CryptoInterface.
+    """
+    flat_list = []
+    for arr in parameters:
+        flat_list.extend(arr.flatten().tolist())
+    return flat_list
+
+def reshape_list_to_ndarrays(flat_vector: List[float], dimensions: List[Tuple[int, ...]]) -> List[np.ndarray]:
+    """
+    Reconstructs the flat cryptographic output back into the 
+    original multi-dimensional ML model structure.
+    """
+    output_tensors = []
+    current_idx = 0
+    
+    for dim in dimensions:
+        if len(dim) == 0:
+            # Handles scalar values
+            output_tensors.append(np.array(flat_vector[current_idx]))
+            current_idx += 1
         else:
-            arr = gen.randint(0, num_range - 1, dimension, dtype=np.int64)
+            num_items = math.prod(dim)
+            layer_data = flat_vector[current_idx : current_idx + num_items]
+            reshaped_array = np.array(layer_data).reshape(dim)
+            output_tensors.append(reshaped_array)
+            current_idx += num_items
             
-        output.append(arr)
-    return output
+    return output_tensors
