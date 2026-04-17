@@ -4,7 +4,6 @@ numpy>=2.4.4
 
 # Protocol & ML Core Utilities
 scikit-learn>=1.0.0
-pycryptodome>=3.15.0
 
 # Core Cryptography & SSS (Stacks & Utils)
 cryptography>=46.0.7
