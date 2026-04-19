@@ -31,6 +31,14 @@ echo "       C - Present Lightweight PRG (Fastest)"
 read -p "Enter Crypto Stack [A/B/C] (Press Enter to default to A): " input_stack
 input_stack=${input_stack:-A}
 
+echo "🔒 Checking for existing mTLS certificates for '$input_client_id'..."
+if [ ! -d "certs/clients/$input_client_id" ]; then
+    echo "   [!] Certificates not found. Auto-provisioning via secure OpenSSL..."
+    ./generate_certs.sh "$input_client_id"
+else
+    echo "   [+] Certificates found securely."
+fi
+
 echo ""
 echo "🚀 Starting Client container '$input_client_id' connecting to '$input_server_ip'..."
 

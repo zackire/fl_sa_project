@@ -32,6 +32,14 @@ echo "       C - Present Lightweight PRG (Fastest)"
 read -p "Enter Crypto Stack [A/B/C] (Press Enter to default to A): " input_stack
 input_stack=${input_stack:-A}
 
+echo "🔒 Checking for existing mTLS certificates for 'fl_server'..."
+if [ ! -d "certs/clients/fl_server" ]; then
+    echo "   [!] Certificates not found. Auto-provisioning via secure OpenSSL..."
+    ./generate_certs.sh "fl_server"
+else
+    echo "   [+] Certificates found securely."
+fi
+
 echo ""
 echo "🚀 Starting Mosquitto Broker and Aggregator Server (Expecting $input_k clients, Threshold: $input_t)..."
 

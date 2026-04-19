@@ -21,16 +21,29 @@ class SecureAggregationClient:
         self.shared_secrets = {} # Stores ECDH keys so we don't recompute them
         self.my_b_u_seed = None  # Stores the self-mask seed for Round 2
         
+        # Asynchronous State Tracks
+        self.received_shares_from = set()
+        self.pending_global_model = None
+        
     def process_mqtt_message(self, topic: str, payload: str):
-        data = json.loads(payload)
+        json_payload = json.loads(payload)
+        meta = json_payload.get("meta", {})
+        data = json_payload.get("data", {})
+        msg_type = meta.get("msg_type")
+        
         try:
-            if "round_0" in topic: self._execute_round_0(data)
-            elif "round_1/broadcast" in topic: self._execute_round_1_distribute(data)
-            elif "round_1/shares" in topic: self._execute_round_1_receive(data)
-            elif "round_2" in topic: self._execute_round_2(data)
-            elif "round_3" in topic: self._execute_round_3(data)
+            if msg_type == "ignition": 
+                self._execute_round_0(data)
+            elif msg_type == "key_registry": 
+                self._execute_round_1_distribute(data)
+            elif msg_type == "secret_shares": 
+                self._execute_round_1_receive(data, meta)
+            elif msg_type == "global_model": 
+                self._execute_round_2(data)
+            elif msg_type == "dropout_list": 
+                self._execute_round_3(data)
         except Exception as e:
-            logging.error(f"[{self.client_id}] Security/Execution failure in {topic}: {e}")
+            logging.error(f"[{self.client_id}] Security/Execution failure handling '{msg_type}': {e}")
 
     # ==========================================
     # ROUND 0: KEY GENERATION
@@ -54,8 +67,8 @@ class SecureAggregationClient:
             "sPK": base64.b64encode(s_keys["sPK"]).decode('utf-8')
         }
         
-        payload = PayloadBuilder.build_round_0_payload(pub_keys)
-        topic = PayloadBuilder.build_topic(epoch=1, round_num=0, sender_id=self.client_id, is_broadcast=False)
+        payload = PayloadBuilder.build_round_0_payload(self.client_id, pub_keys)
+        topic = PayloadBuilder.get_server_dropbox_topic(self.client_id)
         self.mqtt.publish(topic, payload)
 
     # ==========================================
@@ -89,50 +102,73 @@ class SecureAggregationClient:
         shamir_shares = self.crypto.generate_shamir_shares(threshold, total_shares)
         
         # 3. Encrypt Shares for Routing (ASCON/GIFT-COFB)
-        encrypted_shares_to_distribute = {}
         for idx, target_id in enumerate(self.active_users):
             if target_id == self.client_id: continue
             
-            # Extract the specific share tuple for this target
             b_u_share = shamir_shares["b_u"][idx][1]
             s_sk_share = shamir_shares["s_sk"][idx][1]
             c_uv_key = self.shared_secrets[target_id]["c_uv"]
             
             ciphertext = self.crypto.encrypt_shares_for_routing(target_id, b_u_share, s_sk_share, c_uv_key)
-            encrypted_shares_to_distribute[target_id] = base64.b64encode(ciphertext).decode('utf-8')
             
-        payload = PayloadBuilder.build_round_1_payload(encrypted_shares_to_distribute)
-        topic = PayloadBuilder.build_topic(epoch=1, round_num=1, sender_id=self.client_id, is_broadcast=False)
-        self.mqtt.publish(topic, payload)
+            # Publish directly to the target's inbox
+            payload = PayloadBuilder.build_round_1_payload(self.client_id, {target_id: ciphertext})
+            topic = PayloadBuilder.get_client_inbox_topic(target_id)
+            self.mqtt.publish(topic, payload)
 
-    def _execute_round_1_receive(self, data):
+    def _execute_round_1_receive(self, data, meta):
         """
         Triggered when receiving encrypted shares from peers via MQTT.
         """
-        source_id = data.get("source_id")
-        ciphertext = base64.b64decode(data.get("ciphertext"))
+        source_id = meta.get("client_id")
+        
+        # Extract the base64 ciphertext intended for this specific client from the inbound payload
+        b64_cipher = data.get("encrypted_shares", {}).get(self.client_id)
+        if not b64_cipher: return
+        ciphertext = base64.b64decode(b64_cipher)
+        
+        # Track asynchronous receipt
+        self.received_shares_from.add(source_id)
         
         # Fetch the pre-computed ASCON key from memory
         c_uv_key = self.shared_secrets[source_id]["c_uv"] 
         
         # 1. Crypto Stack Execution: Decrypt and hold inside the stack's internal memory
         self.crypto.decrypt_incoming_shares(source_id, ciphertext, c_uv_key)
-        logging.info(f"[{self.client_id}] Successfully decrypted incoming shares from {source_id}.")
+        logging.info(f"[{self.client_id}] Successfully decrypted incoming shares from {source_id}. Tracker: {len(self.received_shares_from)}/{len(self.active_users)-1}")
+        
+        # Attempt Round 2 execution if model is waiting on us
+        self._check_and_execute_round_2()
 
     # ==========================================
     # ROUND 2: MASKED INPUT GENERATION
     # ==========================================
     def _execute_round_2(self, data):
-        """
-        Trains model, flattens weights, computes masks, and returns Y_u.
-        """
-        if "global_weights" not in data:
+        if "weights" not in data: 
             return
             
-        logging.info(f"[{self.client_id}] Received global model. Starting local fit and masking...")
+        logging.info(f"[{self.client_id}] Received global model. Staging for Round 2...")
+        self.pending_global_model = data
+        self._check_and_execute_round_2()
+        
+    def _check_and_execute_round_2(self):
+        """
+        State Machine Lock: Only executes when BOTH the model has arrived 
+        AND all peer shares have been received.
+        """
+        if self.pending_global_model is None:
+            return
+            
+        if len(self.received_shares_from) < len(self.active_users) - 1:
+            logging.info(f"[{self.client_id}] Deferring Round 2 math until all {len(self.active_users)-1} peer shares arrive.")
+            return
+
+        logging.info(f"[{self.client_id}] State Machine Locked. All conditions met for Round 2 Math.")
+        data = self.pending_global_model
+        self.pending_global_model = None # Reset state
         
         # 1. ML Logic
-        delta_w, _ = local_fit(self.ml_model, data['global_weights'], data.get('X_train', []), data.get('y_train', []))
+        delta_w, _ = local_fit(self.ml_model, data['weights'], data.get('X_train', []), data.get('y_train', []))
         
         # 2. Preparation (Flower Utils)
         quantized_w = quantize(delta_w, clipping_range=10.0, target_range=2**24)
@@ -149,8 +185,8 @@ class SecureAggregationClient:
         # 4. Final Aggregation Math
         y_u = self.crypto.compute_masked_input(flat_weights, b_u_vector, pairwise_masks, self.active_users)
         
-        payload = PayloadBuilder.build_round_2_payload(y_u) 
-        topic = PayloadBuilder.build_topic(epoch=1, round_num=2, sender_id=self.client_id, is_broadcast=False)
+        payload = PayloadBuilder.build_round_2_payload(self.client_id, y_u, mask_length) 
+        topic = PayloadBuilder.get_server_dropbox_topic(self.client_id)
         self.mqtt.publish(topic, payload)
 
     # ==========================================
@@ -177,6 +213,8 @@ class SecureAggregationClient:
             "s_sk_shares": {cid: base64.b64encode(share).decode('utf-8') for cid, share in s_sk_shares.items()}
         }
         
-        payload = PayloadBuilder.build_round_3_payload(recovery_payload)
-        topic = PayloadBuilder.build_topic(epoch=1, round_num=3, sender_id=self.client_id, is_broadcast=False)
+        # Encode recovery_payload dict to bytes
+        recovery_bytes = json.dumps(recovery_payload).encode('utf-8')
+        payload = PayloadBuilder.build_round_3_payload(self.client_id, recovery_bytes)
+        topic = PayloadBuilder.get_server_dropbox_topic(self.client_id)
         self.mqtt.publish(topic, payload)
