@@ -32,26 +32,30 @@ class SecureAggregationServer:
         self.s_sk_shares_pool: Dict[str, List[bytes]] = {}
 
     def process_mqtt_message(self, topic: str, payload: str):
-        data = json.loads(payload)
-        
         try:
-            client_id = topic.split('/')[-2]
+            wrapper = json.loads(payload)
+            meta = wrapper.get("meta", {})
+            data = wrapper.get("data", {})
             
-            if "round_0" in topic: self._execute_round_0(client_id, data)
-            elif "round_1" in topic: self._execute_round_1(client_id, data)
-            elif "round_2" in topic: self._execute_round_2(client_id, data)
-            elif "round_3" in topic: self._execute_round_3(client_id, data)
+            client_id = meta.get("client_id")
+            msg_type = meta.get("msg_type")
+            round_num = meta.get("round")
+            
+            if msg_type == "public_keys":
+                self._execute_round_0(client_id, data)
+            elif msg_type == "masked_weights":
+                self._execute_round_2(client_id, data)
+            elif msg_type == "recovery_shares":
+                self._execute_round_3(client_id, data)
+                
         except Exception as e:
-            logging.error(f"[Server] Execution failure for topic {topic}: {e}")
+            logging.error(f"[Server] Execution failure processing meta block for topic {topic}: {e}")
 
     # ==========================================
     # ROUND 0: REGISTRY COLLECTION
     # ==========================================
     def _execute_round_0(self, client_id: str, data: dict):
-        if "public_keys" not in data:
-            return
-            
-        self.public_keys_registry[client_id] = data["public_keys"]
+        self.public_keys_registry[client_id] = data
         self.active_clients.add(client_id)
         
         logging.info(f"[Server] Received keys from {client_id}. ({len(self.active_clients)}/{self.expected_k})")
@@ -59,66 +63,46 @@ class SecureAggregationServer:
         # When all expected clients register, broadcast the directory
         if len(self.active_clients) == self.expected_k:
             logging.info(f"[Server] Quorum reached. Broadcasting public keys registry for Round 1...")
-            payload = json.dumps({
+            data_payload = {
                 "all_public_keys": self.public_keys_registry, 
                 "t_threshold": self.t_threshold
-            })
-            topic = PayloadBuilder.build_topic(epoch=1, round_num=1, sender_id="server", is_broadcast=True)
-            self.mqtt.publish(topic, payload)
-
-    # ==========================================
-    # ROUND 1: THE POSTMASTER (ROUTING SHARES)
-    # ==========================================
-    def _execute_round_1(self, source_client_id: str, data: dict):
-        if "encrypted_shares" not in data:
-            return
+            }
+            wrapped_payload = PayloadBuilder._wrap_payload(1, 1, "key_registry", "server", data_payload)
+            topic = PayloadBuilder.get_server_broadcast_topic()
+            self.mqtt.publish(topic, wrapped_payload)
             
-        # The Server acts purely as a router here. It cannot decrypt the shares.
-        encrypted_shares = data["encrypted_shares"]
-        
-        for target_client_id, ciphertext_b64 in encrypted_shares.items():
-            routed_payload = json.dumps({
-                "source_id": source_client_id,
-                "ciphertext": ciphertext_b64
-            })
-            # Forward directly to the specific client's receiving topic
-            topic = f"ci_fl/epoch_1/round_1/shares/{target_client_id}"
-            self.mqtt.publish(topic, routed_payload)
-            
-        # Mock trigger for transitioning to Round 2
-        # (In a real system, you track exactly how many shares were routed before starting Round 2)
-        if len(self.active_clients) == self.expected_k: 
+            # Asynchronously advance state lock: Immediately broadcast Global Model to start Round 2
+            # Since clients route round 1 shares P2P, the server trusts them to handle it.
             self._trigger_round_2()
 
     def _trigger_round_2(self):
-        logging.info(f"[Server] Share routing complete. Initiating Round 2 (Training)...")
+        logging.info(f"[Server] Key registry broadcasted. Initiating Round 2 (Training) asynchronously...")
         # In actual deployment, global weights are retrieved from the local model
-        payload = json.dumps({"global_weights": [], "X_train": [], "y_train": []})
-        topic = PayloadBuilder.build_topic(epoch=1, round_num=2, sender_id="server", is_broadcast=True)
-        self.mqtt.publish(topic, payload)
+        data_payload = {"global_weights": [], "X_train": [], "y_train": []}
+        wrapped_payload = PayloadBuilder._wrap_payload(1, 2, "global_model", "server", data_payload)
+        topic = PayloadBuilder.get_server_broadcast_topic()
+        self.mqtt.publish(topic, wrapped_payload)
 
     # ==========================================
     # ROUND 2: MASKED INPUT COLLECTION
     # ==========================================
     def _execute_round_2(self, client_id: str, data: dict):
-        if "masked_weights" not in data:
-            return
-            
-        self.y_u_payloads[client_id] = data['masked_weights']
+        self.y_u_payloads[client_id] = data.get('masked_weights', [])
         self.surviving_clients.add(client_id)
         
-        if self._known_mask_length is None:
-            self._known_mask_length = len(data['masked_weights'])
+        if self._known_mask_length is None and len(self.y_u_payloads[client_id]) > 0:
+            self._known_mask_length = len(self.y_u_payloads[client_id])
         
-        # When the threshold is met (or a timer expires), lock the round and demand unmasking shares
-        if len(self.surviving_clients) >= self.t_threshold:
+        # When the threshold is met, lock the round and demand unmasking shares
+        if len(self.surviving_clients) == self.t_threshold:
             self._trigger_round_3()
 
     def _trigger_round_3(self):
-        logging.info(f"[Server] Round 2 complete. {len(self.surviving_clients)} survivors. Requesting recovery shares...")
-        payload = json.dumps({"surviving_clients": list(self.surviving_clients)})
-        topic = PayloadBuilder.build_topic(epoch=1, round_num=3, sender_id="server", is_broadcast=True)
-        self.mqtt.publish(topic, payload)
+        logging.info(f"[Server] Round 2 threshold met. {len(self.surviving_clients)} survivors. Requesting recovery shares...")
+        data_payload = {"surviving_clients": list(self.surviving_clients)}
+        wrapped_payload = PayloadBuilder._wrap_payload(1, 3, "dropout_list", "server", data_payload)
+        topic = PayloadBuilder.get_server_broadcast_topic()
+        self.mqtt.publish(topic, wrapped_payload)
 
     # ==========================================
     # ROUND 3: UNMASKING & DROPOUT RECOVERY

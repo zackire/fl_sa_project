@@ -17,6 +17,9 @@ def main():
     parser.add_argument("--id", type=str, required=True, help="Unique Client ID (e.g., client_1)")
     parser.add_argument("--ip", type=str, required=True, help="MQTT Broker IP")
     parser.add_argument("--stack", type=str, required=True, choices=["A", "B", "C"], help="Crypto Stack")
+    parser.add_argument("--ca", type=str, required=False, help="Path to CA certificate for mTLS")
+    parser.add_argument("--cert", type=str, required=False, help="Path to Client certificate for mTLS")
+    parser.add_argument("--key", type=str, required=False, help="Path to Client key for mTLS")
     args = parser.parse_args()
     logger = setup_custom_logger(args.id)
 
@@ -30,7 +33,13 @@ def main():
     ml_model = AnomalyDetectionLR()
     X_train, y_train = load_local_data(client_id=args.id)
 
-    mqtt_handler = MQTTClientHandler(client_id=args.id, broker_ip=args.ip)
+    mqtt_handler = MQTTClientHandler(
+        client_id=args.id, 
+        broker_ip=args.ip,
+        ca_path=args.ca,
+        cert_path=args.cert,
+        key_path=args.key
+    )
     
     orchestrator = SecureAggregationClient(
         client_id=args.id, 

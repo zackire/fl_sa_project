@@ -13,6 +13,9 @@ def main():
     parser.add_argument("--k", type=int, required=True, help="Expected number of clients (K)")
     parser.add_argument("--t", type=int, required=True, help="Threshold of surviving clients (T)")
     parser.add_argument("--stack", type=str, required=True, choices=["A", "B", "C"], help="Crypto Stack")
+    parser.add_argument("--ca", type=str, required=False, help="Path to CA certificate for mTLS")
+    parser.add_argument("--cert", type=str, required=False, help="Path to Client certificate for mTLS")
+    parser.add_argument("--key", type=str, required=False, help="Path to Client key for mTLS")
     args = parser.parse_args()
     logger = setup_custom_logger("server")
 
@@ -23,7 +26,12 @@ def main():
     else:
         crypto_stack = Stack3Crypto()
 
-    mqtt_handler = MQTTServerHandler(broker_ip=args.ip)
+    mqtt_handler = MQTTServerHandler(
+        broker_ip=args.ip,
+        ca_path=args.ca,
+        cert_path=args.cert,
+        key_path=args.key
+    )
     
     orchestrator = SecureAggregationServer(
         mqtt_handler=mqtt_handler, 
