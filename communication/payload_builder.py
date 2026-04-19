@@ -1,4 +1,3 @@
-import base64
 import json
 from typing import Dict, Any, List
 
@@ -33,33 +32,27 @@ class PayloadBuilder:
         })
 
     @staticmethod
-    def encode_bytes_to_b64_string(raw_bytes: bytes) -> str:
-        """Converts raw cryptographic bytes into a network-efficient Base64 string."""
-        return base64.b64encode(raw_bytes).decode('utf-8')
+    def build_round_0_payload(client_id: str, public_keys: Dict[str, str]) -> str:
+        """Expects a dictionary of base64-encoded keys (strings) from the Orchestrator."""
+        return PayloadBuilder._wrap_payload(1, 0, "public_keys", client_id, {"public_keys": public_keys})
 
     @staticmethod
-    def decode_b64_string_to_bytes(b64_string: str) -> bytes:
-        """Converts an incoming Base64 string back into raw bytes."""
-        return base64.b64decode(b64_string.encode('utf-8'))
+    def build_round_1_payload(client_id: str, encrypted_shares: Dict[str, str]) -> str:
+        """Expects a dictionary of base64-encoded ASCON/GIFT ciphertexts (strings)."""
+        return PayloadBuilder._wrap_payload(1, 1, "secret_shares", client_id, {"encrypted_shares": encrypted_shares})
 
     @staticmethod
-    def build_round_0_payload(client_id: str, public_keys: Dict[str, bytes]) -> str:
-        b64_keys = {k: PayloadBuilder.encode_bytes_to_b64_string(v) for k, v in public_keys.items()}
-        return PayloadBuilder._wrap_payload(1, 0, "public_keys", client_id, {"public_keys": b64_keys})
-
-    @staticmethod
-    def build_round_1_payload(client_id: str, encrypted_shares: Dict[str, bytes]) -> str:
-        b64_shares = {target_id: PayloadBuilder.encode_bytes_to_b64_string(ciphertext) for target_id, ciphertext in encrypted_shares.items()}
-        return PayloadBuilder._wrap_payload(1, 1, "secret_shares", client_id, {"encrypted_shares": b64_shares})
-
-    @staticmethod
-    def build_round_2_payload(client_id: str, masked_weights: List[float], mask_length: int) -> str:
+    def build_round_2_payload(client_id: str, masked_weights: List[float], mask_length: int = 0) -> str:
+        """Packages the flat list of masked model weights."""
         return PayloadBuilder._wrap_payload(1, 2, "masked_weights", client_id, {
             "masked_weights": masked_weights,
             "mask_length": mask_length
         })
 
     @staticmethod
-    def build_round_3_payload(client_id: str, encrypted_recovery_data: bytes) -> str:
-        b64_recovery = PayloadBuilder.encode_bytes_to_b64_string(encrypted_recovery_data)
-        return PayloadBuilder._wrap_payload(1, 3, "recovery_shares", client_id, {"recovery_payload": b64_recovery})
+    def build_round_3_payload(client_id: str, recovery_payload: Dict[str, Dict[str, str]]) -> str:
+        """
+        Expects the fully formatted, nested recovery dictionary from the Orchestrator,
+        separating survivor b_u shares from dropped s_sk shares.
+        """
+        return PayloadBuilder._wrap_payload(1, 3, "recovery_shares", client_id, {"recovery_payload": recovery_payload})
