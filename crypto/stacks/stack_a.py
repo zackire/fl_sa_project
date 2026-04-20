@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives.asymmetric import x25519 # type: ignore
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 
 # Importing the SSS logic provided by the Flower adapter
-from flower_secagg_utils import create_shares
+from secure_aggregation.flower_secagg_utils import create_shares
 
 class Stack1Crypto(CryptoInterface):
     def __init__(self, my_client_id: str):
@@ -41,6 +41,10 @@ class Stack1Crypto(CryptoInterface):
     # ==========================================
 
     def compute_shared_secrets(self, external_public_keys: Dict[str, Dict[str, bytes]]) -> Dict[str, Dict[str, bytes]]:
+        if self._cSK is None or self._sSK is None:
+            raise ValueError("Keypairs not generated.")
+        if external_public_keys is None:
+            raise ValueError("external_public_keys cannot be None.")
         shared_secrets = {}
         for target_id, keys in external_public_keys.items():
             target_cPK = x25519.X25519PublicKey.from_public_bytes(keys["cPK"])
@@ -54,8 +58,12 @@ class Stack1Crypto(CryptoInterface):
         return shared_secrets
 
     def generate_pairwise_masks(self, shared_mask_seeds: Dict[str, bytes], mask_length: int) -> Dict[str, List[float]]:
+        if shared_mask_seeds is None:
+            raise ValueError("shared_mask_seeds cannot be None.")
         masks = {}
         for target_id, seed in shared_mask_seeds.items():
+            if seed is None:
+                raise ValueError(f"Seed for {target_id} is None.")
             # INLINE: ChaCha20 PRG expansion
             chacha_key = seed[:32] 
             nonce = b'\x00' * 16  
@@ -74,6 +82,8 @@ class Stack1Crypto(CryptoInterface):
         return self._b_u
 
     def generate_shamir_shares(self, threshold: int, total_shares: int) -> Dict[str, List[Tuple[int, bytes]]]:
+        if self._b_u is None or self._sSK is None:
+            raise ValueError("Secrets not generated.")
         # INLINE: Utilizing Flower's SSS
         b_u_shares_raw = create_shares(self._b_u, threshold, total_shares)
         s_sk_shares_raw = create_shares(self._sSK.private_bytes_raw(), threshold, total_shares)
@@ -88,6 +98,8 @@ class Stack1Crypto(CryptoInterface):
         }
 
     def encrypt_shares_for_routing(self, target_client_id: str, b_u_share: bytes, s_sk_share: bytes, c_uv: bytes) -> bytes:
+        if b_u_share is None or s_sk_share is None or c_uv is None:
+            raise ValueError("None values passed to byte-strict encryption.")
         payload = pickle.dumps({"b_u_share": b_u_share, "s_sk_share": s_sk_share})
         ascon_key = c_uv[:16] 
         nonce = os.urandom(16)
@@ -96,6 +108,8 @@ class Stack1Crypto(CryptoInterface):
         return nonce + ciphertext
 
     def decrypt_incoming_shares(self, source_client_id: str, ciphertext: bytes, c_uv: bytes) -> bytes:
+        if ciphertext is None or c_uv is None:
+            raise ValueError("None values passed to byte-strict decryption.")
         ascon_key = c_uv[:16]
         nonce = ciphertext[:16]
         actual_ciphertext = ciphertext[16:]
@@ -115,6 +129,8 @@ class Stack1Crypto(CryptoInterface):
     # ==========================================
 
     def generate_self_mask(self, self_mask_seed: bytes, mask_length: int) -> List[float]:
+        if self_mask_seed is None:
+            raise ValueError("self_mask_seed cannot be None.")
         # INLINE: ChaCha20 PRG expansion
         chacha_key = self_mask_seed[:32] 
         nonce = b'\x00' * 16  
@@ -125,6 +141,8 @@ class Stack1Crypto(CryptoInterface):
         return list(struct.unpack(f'{mask_length}f', prg_bytes))
 
     def compute_masked_input(self, raw_data_vector: List[float], b_u_vector: List[float], pairwise_masks: Dict[str, List[float]], active_users: List[str]) -> List[float]:
+        if raw_data_vector is None or b_u_vector is None or pairwise_masks is None or active_users is None:
+            raise ValueError("Masking inputs cannot be None.")
         # Vector Arithmetic: Summing raw data with the self-mask
         y_u = [r + b for r, b in zip(raw_data_vector, b_u_vector)]
         

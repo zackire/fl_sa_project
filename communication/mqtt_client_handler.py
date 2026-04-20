@@ -8,7 +8,7 @@ class MQTTClientHandler:
         self.broker_ip = broker_ip
         self.port = port
         
-        self.client = mqtt.Client(client_id=self.client_id)
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.client_id)
         
         # Configure mTLS if certificates are provided (port usually 8883 for TLS)
         if ca_path and cert_path and key_path:
@@ -25,22 +25,22 @@ class MQTTClientHandler:
     def set_orchestrator(self, orchestrator):
         self.orchestrator = orchestrator
 
-    def _on_connect(self, client, userdata, flags, rc):
-        if rc == 0:
+    def _on_connect(self, client, userdata, flags, reason_code, properties):
+        if reason_code == 0:
             logging.info(f"[{self.client_id}] Successfully connected to Mosquitto at {self.broker_ip}")
             # Use PayloadBuilder for dynamic routing rules with QoS 2
             self.client.subscribe(PayloadBuilder.get_server_broadcast_topic(), qos=2)
             self.client.subscribe(PayloadBuilder.get_client_inbox_topic(self.client_id), qos=2)
         else:
-            logging.error(f"[{self.client_id}] Connection failed with code {rc}")
+            logging.error(f"[{self.client_id}] Connection failed with code {reason_code}")
 
-    def _on_disconnect(self, client, userdata, rc):
-        logging.warning(f"[{self.client_id}] Disconnected from broker (rc={rc})")
+    def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties=None):
+        logging.warning(f"[{self.client_id}] Disconnected from broker (rc={reason_code})")
 
-    def _on_publish(self, client, userdata, mid):
+    def _on_publish(self, client, userdata, mid, reason_code=None, properties=None):
         logging.debug(f"[{self.client_id}] QoS 2 Message successfully delivered (mid={mid})")
 
-    def _on_subscribe(self, client, userdata, mid, granted_qos):
+    def _on_subscribe(self, client, userdata, mid, reason_code_list, properties):
         logging.info(f"[{self.client_id}] Subscribed to topic successfully (mid={mid})")
 
     def _on_message(self, client, userdata, msg):

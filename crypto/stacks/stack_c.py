@@ -1,15 +1,16 @@
 import os
+import sys
 import pickle
 import struct
-import gift_cofb
 from typing import Dict, List, Tuple
 
 from crypto.interface import CryptoInterface
 from cryptography.hazmat.primitives.asymmetric import x25519 # type: ignore
-from present import Present 
+from crypto.stacks.present_algo import Present
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
 # Importing the SSS logic provided by the Flower adapter
-from flower_secagg_utils import create_shares
+from secure_aggregation.flower_secagg_utils import create_shares
 
 class Stack3Crypto(CryptoInterface):
     def __init__(self, my_client_id: str):
@@ -41,6 +42,10 @@ class Stack3Crypto(CryptoInterface):
     # ==========================================
 
     def compute_shared_secrets(self, external_public_keys: Dict[str, Dict[str, bytes]]) -> Dict[str, Dict[str, bytes]]:
+        if self._cSK is None or self._sSK is None:
+            raise ValueError("Keypairs not generated.")
+        if external_public_keys is None:
+            raise ValueError("external_public_keys cannot be None.")
         shared_secrets = {}
         for target_id, keys in external_public_keys.items():
             target_cPK = x25519.X25519PublicKey.from_public_bytes(keys["cPK"])
@@ -54,11 +59,15 @@ class Stack3Crypto(CryptoInterface):
         return shared_secrets
 
     def generate_pairwise_masks(self, shared_mask_seeds: Dict[str, bytes], mask_length: int) -> Dict[str, List[float]]:
+        if shared_mask_seeds is None:
+            raise ValueError("shared_mask_seeds cannot be None.")
         masks = {}
         byte_length = mask_length * 4
         num_blocks = (byte_length + 7) // 8  # PRESENT uses 8-byte (64-bit) blocks
         
         for target_id, seed in shared_mask_seeds.items():
+            if seed is None:
+                raise ValueError(f"Seed for {target_id} is None.")
             # INLINE: PRESENT-128 PRG expansion via CTR mode
             present_key = seed[:16] 
             cipher = Present(present_key)
@@ -80,6 +89,8 @@ class Stack3Crypto(CryptoInterface):
         return self._b_u
 
     def generate_shamir_shares(self, threshold: int, total_shares: int) -> Dict[str, List[Tuple[int, bytes]]]:
+        if self._b_u is None or self._sSK is None:
+            raise ValueError("Secrets not generated.")
         # INLINE: Utilizing Flower's SSS
         b_u_shares_raw = create_shares(self._b_u, threshold, total_shares)
         s_sk_shares_raw = create_shares(self._sSK.private_bytes_raw(), threshold, total_shares)
@@ -93,25 +104,40 @@ class Stack3Crypto(CryptoInterface):
         }
 
     def encrypt_shares_for_routing(self, target_client_id: str, b_u_share: bytes, s_sk_share: bytes, c_uv: bytes) -> bytes:
-        payload = pickle.dumps({"b_u_share": b_u_share, "s_sk_share": s_sk_share})
-        gift_key = c_uv[:16] 
-        nonce = os.urandom(16)
-        ad = b"" 
+        if b_u_share is None or s_sk_share is None or c_uv is None:
+            raise ValueError("None values passed to byte-strict encryption.")
         
-        # INLINE: GIFT-COFB AEAD
-        ciphertext = gift_cofb.encrypt(payload, ad, gift_key, nonce)
+        payload = pickle.dumps({"b_u_share": b_u_share, "s_sk_share": s_sk_share})
+        
+        # ChaCha20Poly1305 requires a 32-byte key. 
+        # c_uv from X25519 is already 32 bytes.
+        chacha_key = c_uv 
+        cipher = ChaCha20Poly1305(chacha_key)
+        
+        # 12-byte nonce is standard for ChaCha20Poly1305
+        nonce = os.urandom(12)
+        
+        # Encrypt the payload (AEAD: includes internal integrity check)
+        ciphertext = cipher.encrypt(nonce, payload, None)
+        
+        # Prepend nonce for the receiver
         return nonce + ciphertext
 
     def decrypt_incoming_shares(self, source_client_id: str, ciphertext: bytes, c_uv: bytes) -> bytes:
-        gift_key = c_uv[:16]
-        nonce = ciphertext[:16]
-        actual_ciphertext = ciphertext[16:]
-        ad = b""
+        if ciphertext is None or c_uv is None:
+            raise ValueError("None values passed to byte-strict decryption.")
+        
+        chacha_key = c_uv
+        cipher = ChaCha20Poly1305(chacha_key)
+        
+        # Extract the 12-byte nonce and actual ciphertext
+        nonce = ciphertext[:12]
+        actual_ciphertext = ciphertext[12:]
         
         try:
-            plaintext = gift_cofb.decrypt(actual_ciphertext, ad, gift_key, nonce)
+            plaintext = cipher.decrypt(nonce, actual_ciphertext, None)
         except Exception:
-            raise ValueError("Authentication tag verification failed.")
+            raise ValueError(f"Decryption or integrity check failed for client {source_client_id}")
             
         shares = pickle.loads(plaintext)
         self._held_b_u_shares[source_client_id] = shares["b_u_share"]
@@ -124,6 +150,8 @@ class Stack3Crypto(CryptoInterface):
     # ==========================================
 
     def generate_self_mask(self, self_mask_seed: bytes, mask_length: int) -> List[float]:
+        if self_mask_seed is None:
+            raise ValueError("self_mask_seed cannot be None.")
         # INLINE: PRESENT-128 PRG expansion via CTR mode
         byte_length = mask_length * 4
         num_blocks = (byte_length + 7) // 8  
@@ -141,6 +169,8 @@ class Stack3Crypto(CryptoInterface):
         return list(struct.unpack(f'{mask_length}f', prg_bytes))
 
     def compute_masked_input(self, raw_data_vector: List[float], b_u_vector: List[float], pairwise_masks: Dict[str, List[float]], active_users: List[str]) -> List[float]:
+        if raw_data_vector is None or b_u_vector is None or pairwise_masks is None or active_users is None:
+            raise ValueError("Masking inputs cannot be None.")
         # Vector Arithmetic: Summing raw data with the self-mask
         y_u = [r + b for r, b in zip(raw_data_vector, b_u_vector)]
         

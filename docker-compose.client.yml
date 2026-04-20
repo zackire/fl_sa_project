@@ -1,14 +1,31 @@
+version: '3.8'
+
 services:
-  fl-client:
-    build: 
-      context: .
-      dockerfile: Dockerfile.client
-    container_name: "fl_${CLIENT_ID:?ERROR: Please run ./start_client.sh instead of docker-compose directly!}"
-    environment:
-      - "CLIENT_ID=${CLIENT_ID:?ERROR: You must provide a CLIENT_ID}"
-      - "SERVER_IP=${SERVER_IP:?ERROR: You must provide the SERVER_IP}"
-      - "CRYPTO_STACK=${CRYPTO_STACK:?ERROR: You must provide a CRYPTO_STACK}"
-    volumes:
-      - ./certs/clients/${CLIENT_ID}:/app/certs:ro
-    command: ["sh", "-c", "python main_client.py --id $${CLIENT_ID} --ip $${SERVER_IP} --stack $${CRYPTO_STACK} --ca /app/certs/ca.crt --cert /app/certs/client.crt --key /app/certs/client.key"]
+  fl-client-1:
+    build: .
+    container_name: fl-client-1
+    command: ["python", "main_client.py", "--id", "client_1", "--ip", "mqtt-broker", "--stack", "A"]
     restart: on-failure
+    networks:
+      - fl_network
+
+  fl-client-2:
+    build: .
+    container_name: fl-client-2
+    command: ["python", "main_client.py", "--id", "client_2", "--ip", "mqtt-broker", "--stack", "A"]
+    restart: on-failure
+    networks:
+      - fl_network
+
+  fl-client-3:
+    build: .
+    container_name: fl-client-3
+    command: ["python", "main_client.py", "--id", "client_3", "--ip", "mqtt-broker", "--stack", "A"]
+    restart: on-failure
+    networks:
+      - fl_network
+
+networks:
+  fl_network:
+    external: true
+    name: fl_shared_bridge

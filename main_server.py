@@ -20,11 +20,11 @@ def main():
     logger = setup_custom_logger("server")
 
     if args.stack == "A":
-        crypto_stack = Stack1Crypto()
+        crypto_stack = Stack1Crypto("server")
     elif args.stack == "B":
-        crypto_stack = Stack2Crypto()
+        crypto_stack = Stack2Crypto("server")
     else:
-        crypto_stack = Stack3Crypto()
+        crypto_stack = Stack3Crypto("server")
 
     mqtt_handler = MQTTServerHandler(
         broker_ip=args.ip,

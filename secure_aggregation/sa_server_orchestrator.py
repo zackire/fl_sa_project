@@ -8,7 +8,7 @@ from fl_core.fedavg_logic import aggregate
 
 # Cryptography & Utilities
 from crypto.interface import CryptoInterface
-from cryptography.hazmat.primitives.asymmetric import x25519 # Required to re-derive dropped secrets
+from cryptography.hazmat.primitives.asymmetric import x25519
 from secure_aggregation.flower_secagg_utils import combine_shares, dequantize, reshape_list_to_ndarrays
 from communication.payload_builder import PayloadBuilder
 
@@ -18,7 +18,7 @@ class SecureAggregationServer:
         self.t_threshold = t_threshold
         self.expected_k = expected_k
         self.crypto = crypto_stack 
-        self.model_dimensions = model_dimensions # Required to reshape the final sum
+        self.model_dimensions = model_dimensions
         
         # Network & Protocol State
         self.active_clients = set()
@@ -31,16 +31,28 @@ class SecureAggregationServer:
         self.b_u_shares_pool: Dict[str, List[bytes]] = {}
         self.s_sk_shares_pool: Dict[str, List[bytes]] = {}
 
+        # FIX 1: Add State Machine Locks to prevent infinite broadcast loops
+        self.r1_received = set()
+        self.r2_triggered = False
+        self.r3_triggered = False
+        self.finalized = False
+
     def process_mqtt_message(self, topic: str, payload: str):
-        data = json.loads(payload)
+        full_payload = json.loads(payload)
+        meta = full_payload.get("meta", {})
+        data = full_payload.get("data", {})
         
         try:
-            client_id = topic.split('/')[-2]
+            client_id = meta.get("client_id")
+            if not client_id:
+                client_id = topic.split('/')[-2]
+                
+            round_num = meta.get("round")
             
-            if "round_0" in topic: self._execute_round_0(client_id, data)
-            elif "round_1" in topic: self._execute_round_1(client_id, data)
-            elif "round_2" in topic: self._execute_round_2(client_id, data)
-            elif "round_3" in topic: self._execute_round_3(client_id, data)
+            if round_num == 0: self._execute_round_0(client_id, data)
+            elif round_num == 1: self._execute_round_1(client_id, data)
+            elif round_num == 2: self._execute_round_2(client_id, data)
+            elif round_num == 3: self._execute_round_3(client_id, data)
         except Exception as e:
             logging.error(f"[Server] Execution failure for topic {topic}: {e}")
 
@@ -59,10 +71,13 @@ class SecureAggregationServer:
         if len(self.active_clients) == self.expected_k:
             logging.info(f"[Server] Quorum reached. Broadcasting public keys registry for Round 1...")
             payload = json.dumps({
-                "all_public_keys": self.public_keys_registry, 
-                "t_threshold": self.t_threshold
+                "meta": {"msg_type": "key_registry", "round": 1},
+                "data": {
+                    "all_public_keys": self.public_keys_registry, 
+                    "t_threshold": self.t_threshold
+                }
             })
-            topic = PayloadBuilder.build_topic(epoch=1, round_num=1, sender_id="server", is_broadcast=True)
+            topic = PayloadBuilder.get_server_broadcast_topic()
             self.mqtt.publish(topic, payload)
 
     # ==========================================
@@ -75,21 +90,26 @@ class SecureAggregationServer:
         encrypted_shares = data["encrypted_shares"]
         
         for target_client_id, ciphertext_b64 in encrypted_shares.items():
-            routed_payload = json.dumps({
-                "source_id": source_client_id,
-                "ciphertext": ciphertext_b64
-            })
-            topic = f"ci_fl/epoch_1/round_1/shares/{target_client_id}"
+            routed_payload = PayloadBuilder.build_round_1_payload(source_client_id, {target_client_id: ciphertext_b64})
+            topic = PayloadBuilder.get_client_inbox_topic(target_client_id)
             self.mqtt.publish(topic, routed_payload)
             
-        # Simplified trigger logic for Round 2
-        if len(self.active_clients) == self.expected_k: 
+        # FIX 2: Track who actually sent shares instead of relying on active_clients
+        self.r1_received.add(source_client_id)
+            
+        # FIX 3: Apply boolean lock to prevent multiple triggers
+        if len(self.r1_received) == self.expected_k and not self.r2_triggered: 
+            self.r2_triggered = True
             self._trigger_round_2()
 
     def _trigger_round_2(self):
         logging.info(f"[Server] Share routing complete. Initiating Round 2 (Training)...")
-        payload = json.dumps({"global_weights": [], "X_train": [], "y_train": []})
-        topic = PayloadBuilder.build_topic(epoch=1, round_num=2, sender_id="server", is_broadcast=True)
+        # FIX 4: Remove ghost datasets (X_train/y_train) and rename to "global_weights"
+        payload = json.dumps({
+            "meta": {"msg_type": "global_model", "round": 2},
+            "data": {"global_weights": []}
+        })
+        topic = PayloadBuilder.get_server_broadcast_topic()
         self.mqtt.publish(topic, payload)
 
     # ==========================================
@@ -105,13 +125,18 @@ class SecureAggregationServer:
         if self._known_mask_length is None:
             self._known_mask_length = data.get('mask_length', len(data['masked_weights']))
         
-        if len(self.surviving_clients) >= self.t_threshold:
+        # FIX 5: Apply boolean lock
+        if len(self.surviving_clients) >= self.t_threshold and not self.r3_triggered:
+            self.r3_triggered = True
             self._trigger_round_3()
 
     def _trigger_round_3(self):
         logging.info(f"[Server] Round 2 complete. {len(self.surviving_clients)} survivors. Requesting recovery shares...")
-        payload = json.dumps({"surviving_clients": list(self.surviving_clients)})
-        topic = PayloadBuilder.build_topic(epoch=1, round_num=3, sender_id="server", is_broadcast=True)
+        payload = json.dumps({
+            "meta": {"msg_type": "dropout_list", "round": 3},
+            "data": {"surviving_clients": list(self.surviving_clients)}
+        })
+        topic = PayloadBuilder.get_server_broadcast_topic()
         self.mqtt.publish(topic, payload)
 
     # ==========================================
@@ -129,7 +154,9 @@ class SecureAggregationServer:
         for target_id, b64_share in recovery_payload.get("s_sk_shares", {}).items():
             self.s_sk_shares_pool.setdefault(target_id, []).append(base64.b64decode(b64_share))
             
-        if len(self.b_u_shares_pool) >= len(self.surviving_clients): 
+        # FIX 6: Apply boolean lock
+        if len(self.b_u_shares_pool) >= len(self.surviving_clients) and not self.finalized: 
+            self.finalized = True
             self._finalize_aggregation()
 
     def _finalize_aggregation(self):
@@ -139,7 +166,6 @@ class SecureAggregationServer:
         final_sum = [sum(x) for x in zip(*self.y_u_payloads.values())]
         
         # 2. Cancel Survivor Self-Masks (b_u)
-        
         for survivor_id in self.surviving_clients:
             shares = self.b_u_shares_pool[survivor_id][:self.t_threshold]
             b_u_seed = combine_shares(shares)
@@ -162,8 +188,8 @@ class SecureAggregationServer:
             pairwise_masks = self.crypto.generate_pairwise_masks(dropped_shared_seeds, self._known_mask_length)
             
             for survivor_id, mask_vector in pairwise_masks.items():
-                sign = 1 if dropped_id > survivor_id else -1
-                final_sum = [y - (sign * m) for y, m in zip(final_sum, mask_vector)]
+                survivor_sign = 1 if survivor_id > dropped_id else -1
+                final_sum = [y - (survivor_sign * m) for y, m in zip(final_sum, mask_vector)]
                 
         logging.info("[Server] Cryptographic Unmasking Complete. Passing to FL Logic...")
         
@@ -171,7 +197,7 @@ class SecureAggregationServer:
         dequantized_flat_sum = dequantize([final_sum], clipping_range=10.0, target_range=2**24)[0]
         final_model_ndarrays = reshape_list_to_ndarrays(dequantized_flat_sum, self.model_dimensions)
         
-        # Average and apply via FedAvg (UPDATED LINE)
+        # Average and apply via FedAvg
         new_global_weights = aggregate(final_model_ndarrays, len(self.surviving_clients))
         
         logging.info("[Server] Global model successfully updated.")

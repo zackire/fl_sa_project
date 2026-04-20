@@ -2,10 +2,12 @@ import json
 import logging
 import base64
 from crypto.interface import CryptoInterface
+
+# Machine Learning Logic (Cleaned of dataset requirements)
 from fl_core.fedavg_logic import local_fit
 
 # Importing only the ML prep and dimensionality adapters from our utils
-from secure_aggregation.flower_secagg_utils import quantize, flatten_ndarrays_to_list, get_model_dimensions
+from secure_aggregation.flower_secagg_utils import quantize, flatten_ndarrays_to_list
 from communication.payload_builder import PayloadBuilder
 
 class SecureAggregationClient:
@@ -102,6 +104,7 @@ class SecureAggregationClient:
         shamir_shares = self.crypto.generate_shamir_shares(threshold, total_shares)
         
         # 3. Encrypt Shares for Routing (ASCON/GIFT-COFB)
+        encrypted_shares_payload = {}
         for idx, target_id in enumerate(self.active_users):
             if target_id == self.client_id: continue
             
@@ -110,11 +113,12 @@ class SecureAggregationClient:
             c_uv_key = self.shared_secrets[target_id]["c_uv"]
             
             ciphertext = self.crypto.encrypt_shares_for_routing(target_id, b_u_share, s_sk_share, c_uv_key)
+            encrypted_shares_payload[target_id] = base64.b64encode(ciphertext).decode('utf-8')
             
-            # Publish directly to the target's inbox
-            payload = PayloadBuilder.build_round_1_payload(self.client_id, {target_id: ciphertext})
-            topic = PayloadBuilder.get_client_inbox_topic(target_id)
-            self.mqtt.publish(topic, payload)
+        # Send everything to Server Dropbox
+        payload = PayloadBuilder.build_round_1_payload(self.client_id, encrypted_shares_payload)
+        topic = PayloadBuilder.get_server_dropbox_topic(self.client_id)
+        self.mqtt.publish(topic, payload)
 
     def _execute_round_1_receive(self, data, meta):
         """
@@ -144,7 +148,8 @@ class SecureAggregationClient:
     # ROUND 2: MASKED INPUT GENERATION
     # ==========================================
     def _execute_round_2(self, data):
-        if "weights" not in data: 
+        # FIX 1: The server broadcasts "global_weights", not "weights"
+        if "global_weights" not in data: 
             return
             
         logging.info(f"[{self.client_id}] Received global model. Staging for Round 2...")
@@ -167,11 +172,12 @@ class SecureAggregationClient:
         data = self.pending_global_model
         self.pending_global_model = None # Reset state
         
-        # 1. ML Logic
-        delta_w, _ = local_fit(self.ml_model, data['weights'], data.get('X_train', []), data.get('y_train', []))
+        # FIX 2: Clean ML execution without Ghost Datasets
+        global_weights = data.get('global_weights', [])
+        new_weights = local_fit(self.ml_model, global_weights)
         
         # 2. Preparation (Flower Utils)
-        quantized_w = quantize(delta_w, clipping_range=10.0, target_range=2**24)
+        quantized_w = quantize(new_weights, clipping_range=10.0, target_range=2**24)
         flat_weights = flatten_ndarrays_to_list(quantized_w)
         mask_length = len(flat_weights)
         
@@ -213,8 +219,7 @@ class SecureAggregationClient:
             "s_sk_shares": {cid: base64.b64encode(share).decode('utf-8') for cid, share in s_sk_shares.items()}
         }
         
-        # Encode recovery_payload dict to bytes
-        recovery_bytes = json.dumps(recovery_payload).encode('utf-8')
-        payload = PayloadBuilder.build_round_3_payload(self.client_id, recovery_bytes)
+        # FIX 3: Pass the dictionary directly to the new PayloadBuilder 
+        payload = PayloadBuilder.build_round_3_payload(self.client_id, recovery_payload)
         topic = PayloadBuilder.get_server_dropbox_topic(self.client_id)
         self.mqtt.publish(topic, payload)
