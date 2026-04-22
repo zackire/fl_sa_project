@@ -26,9 +26,9 @@ echo ""
 
 # --- 3. Crypto Stack ---
 echo "GUIDE: Choose the encryption level:"
-echo "       A - Base Cryptography & AEAD (Heavy)"
-echo "       B - Simon/Speck Lightweight PRG (Medium)"
-echo "       C - Present Lightweight PRG (Fastest)"
+echo "       A - X25519 + ChaCha20 + Ascon128"
+echo "       B - X25519 + SIMON + Ascon128"
+echo "       C - X25519 + PRESENT + ChaChaPoly "
 read -p "Enter Crypto Stack [A/B/C] (Press Enter to default to A): " input_stack
 input_stack=${input_stack:-A}
 

@@ -1,10 +1,10 @@
 import os
 import pickle
 import struct
-import ascon
 from typing import Dict, List, Tuple
 
 from crypto.interface import CryptoInterface
+from crypto.stacks.algorithms import ascon
 from cryptography.hazmat.primitives.asymmetric import x25519
 from simon import SimonCipher
 
@@ -103,34 +103,34 @@ class Stack2Crypto(CryptoInterface):
         }
 
     def encrypt_shares_for_routing(self, target_client_id: str, b_u_share: bytes, s_sk_share: bytes, c_uv: bytes) -> bytes:
-        if b_u_share is None or s_sk_share is None or c_uv is None:
-            raise ValueError("None values passed to byte-strict encryption.")
-        payload = pickle.dumps({"b_u_share": b_u_share, "s_sk_share": s_sk_share})
-        ascon_key = c_uv[:16] 
-        nonce = os.urandom(16)
-        
-        # Using Ascon-128a variant as specified
-        ciphertext = ascon.ascon_encrypt(ascon_key, nonce, b"", payload, variant="Ascon-128a")
-        return nonce + ciphertext
+            if b_u_share is None or s_sk_share is None or c_uv is None:
+                raise ValueError("None values passed to byte-strict encryption.")
+            payload = pickle.dumps({"b_u_share": b_u_share, "s_sk_share": s_sk_share})
+            ascon_key = c_uv[:16] 
+            nonce = os.urandom(16)
+            
+            # FIX 1: Change "Ascon-128a" to "Ascon-AEAD128"
+            # FIX 2: Ensure you are calling it from the local module
+            ciphertext = ascon.ascon_encrypt(ascon_key, nonce, b"", payload, variant="Ascon-AEAD128")
+            return nonce + ciphertext
 
     def decrypt_incoming_shares(self, source_client_id: str, ciphertext: bytes, c_uv: bytes) -> bytes:
-        if ciphertext is None or c_uv is None:
-            raise ValueError("None values passed to byte-strict decryption.")
-        ascon_key = c_uv[:16]
-        nonce = ciphertext[:16]
-        actual_ciphertext = ciphertext[16:]
-        
-        # Using Ascon-128a variant as specified
-        plaintext = ascon.ascon_decrypt(ascon_key, nonce, b"", actual_ciphertext, variant="Ascon-128a")
-        if plaintext is None:
-            raise ValueError("Authentication tag verification failed.")
+            if ciphertext is None or c_uv is None:
+                raise ValueError("None values passed to byte-strict decryption.")
+            ascon_key = c_uv[:16]
+            nonce = ciphertext[:16]
+            actual_ciphertext = ciphertext[16:]
             
-        shares = pickle.loads(plaintext)
-        self._held_b_u_shares[source_client_id] = shares["b_u_share"]
-        self._held_s_sk_shares[source_client_id] = shares["s_sk_share"]
-        
-        return plaintext
-
+            # FIX 3: Change "Ascon-128a" to "Ascon-AEAD128"
+            plaintext = ascon.ascon_decrypt(ascon_key, nonce, b"", actual_ciphertext, variant="Ascon-AEAD128")
+            if plaintext is None:
+                raise ValueError("Authentication tag verification failed.")
+                
+            shares = pickle.loads(plaintext)
+            self._held_b_u_shares[source_client_id] = shares["b_u_share"]
+            self._held_s_sk_shares[source_client_id] = shares["s_sk_share"]
+            
+            return plaintext
     # ==========================================
     # ROUND 2: MASKED INPUT GENERATION
     # ==========================================

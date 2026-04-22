@@ -9,9 +9,5 @@ scikit-learn>=1.0.0
 cryptography>=41.0.0
 pycryptodome>=3.23.0
 
-# Lightweight AEAD Ciphers (Routing Encryption)
-ascon>=0.0.9
-#gift-cofb>=1.0.0  
-
 # Lightweight PRG Block Ciphers (Mask Expansion)
 simonspeckciphers>=1.0.0

@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 
 from crypto.interface import CryptoInterface
 from cryptography.hazmat.primitives.asymmetric import x25519 # type: ignore
-from crypto.stacks.present_algo import Present
+from crypto.stacks.algorithms.present_algo import Present
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
 # Importing the SSS logic provided by the Flower adapter

@@ -1,27 +1,24 @@
 version: '3.8'
 
 services:
-  fl-client-1:
+  fl-client:
     build: .
-    container_name: fl-client-1
-    command: ["python", "main_client.py", "--id", "client_1", "--ip", "mqtt-broker", "--stack", "A"]
-    restart: on-failure
-    networks:
-      - fl_network
-
-  fl-client-2:
-    build: .
-    container_name: fl-client-2
-    command: ["python", "main_client.py", "--id", "client_2", "--ip", "mqtt-broker", "--stack", "A"]
-    restart: on-failure
-    networks:
-      - fl_network
-
-  fl-client-3:
-    build: .
-    container_name: fl-client-3
-    command: ["python", "main_client.py", "--id", "client_3", "--ip", "mqtt-broker", "--stack", "A"]
-    restart: on-failure
+    container_name: fl_${CLIENT_ID}
+    environment:
+      - CLIENT_ID=${CLIENT_ID}
+      - SERVER_IP=${SERVER_IP}
+      - CRYPTO_STACK=${CRYPTO_STACK}
+    command: [
+      "python", "main_client.py", 
+      "--id", "${CLIENT_ID}", 
+      "--ip", "${SERVER_IP}", 
+      "--stack", "${CRYPTO_STACK}",
+      "--ca", "/app/certs/ca.crt",
+      "--cert", "/app/certs/client.crt",
+      "--key", "/app/certs/client.key"
+    ]
+    volumes:
+      - ./certs/clients/${CLIENT_ID}:/app/certs:ro
     networks:
       - fl_network
 

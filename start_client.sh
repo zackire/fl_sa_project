@@ -25,9 +25,9 @@ echo ""
 
 # --- 3. Crypto Stack ---
 echo "GUIDE: Choose the encryption level:"
-echo "       A - Base Cryptography & AEAD (Heavy)"
-echo "       B - Simon/Speck Lightweight PRG (Medium)"
-echo "       C - Present Lightweight PRG (Fastest)"
+echo "       A - X25519 + ChaCha20 + Ascon128"
+echo "       B - X25519 + SIMON + Ascon128"
+echo "       C - X25519 + PRESENT + ChaChaPoly "
 read -p "Enter Crypto Stack [A/B/C] (Press Enter to default to A): " input_stack
 input_stack=${input_stack:-A}
 
@@ -42,10 +42,9 @@ fi
 echo ""
 echo "🚀 Starting Client container '$input_client_id' connecting to '$input_server_ip'..."
 
-# Pass the variables inline and run compose
 CLIENT_ID=$input_client_id \
 SERVER_IP=$input_server_ip \
 CRYPTO_STACK=$input_stack \
-docker-compose -f docker-compose.client.yml up -d --build
+docker-compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build
 
 echo "Done! Run 'docker logs -f fl_$input_client_id' to watch the network traffic."
