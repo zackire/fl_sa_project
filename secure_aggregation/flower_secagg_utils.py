@@ -95,10 +95,12 @@ def dequantize(
     quantizer = (2 * clipping_range) / target_range
     shift = -clipping_range
     for arr in quantized_parameters:
-        recon_arr = arr.view(np.ndarray).astype(float)
+        # Replaced arr.view(np.ndarray) with np.array(arr) to safely accept our flat lists
+        recon_arr = np.array(arr).astype(float)
         recon_arr = recon_arr * quantizer + shift
         reverse_quantized_list.append(recon_arr)
     return reverse_quantized_list
+
 
 # ------------ Flower framework Source Code End ------------
 

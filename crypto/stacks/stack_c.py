@@ -68,15 +68,18 @@ class Stack3Crypto(CryptoInterface):
         for target_id, seed in shared_mask_seeds.items():
             if seed is None:
                 raise ValueError(f"Seed for {target_id} is None.")
-            # INLINE: PRESENT-128 PRG expansion via CTR mode
-            present_key = seed[:16] 
-            cipher = Present(present_key)
+                
+            # FIX 1: Extract exactly 80 bits (10 bytes) and convert to an integer
+            present_key_int = int.from_bytes(seed[:10], byteorder='big') 
+            cipher = Present(present_key_int)
             mask_bytes = bytearray()
             
             for counter in range(num_blocks):
-                counter_block = counter.to_bytes(8, byteorder='big')
-                prg_block = cipher.encrypt(counter_block)
-                mask_bytes.extend(prg_block)
+                # FIX 2: Pass the counter directly as an integer (plain_text)
+                prg_block_int = cipher.encrypt(counter)
+                
+                # FIX 3: Convert the resulting integer back into 8 bytes to build the mask
+                mask_bytes.extend(prg_block_int.to_bytes(8, byteorder='big'))
                 
             prg_bytes = bytes(mask_bytes[:byte_length])
             masks[target_id] = list(struct.unpack(f'{mask_length}f', prg_bytes))
@@ -152,18 +155,21 @@ class Stack3Crypto(CryptoInterface):
     def generate_self_mask(self, self_mask_seed: bytes, mask_length: int) -> List[float]:
         if self_mask_seed is None:
             raise ValueError("self_mask_seed cannot be None.")
-        # INLINE: PRESENT-128 PRG expansion via CTR mode
+            
         byte_length = mask_length * 4
         num_blocks = (byte_length + 7) // 8  
         
-        present_key = self_mask_seed[:16] 
-        cipher = Present(present_key)
+        # FIX 1: Extract exactly 80 bits (10 bytes) and convert to an integer
+        present_key_int = int.from_bytes(self_mask_seed[:10], byteorder='big') 
+        cipher = Present(present_key_int)
         mask_bytes = bytearray()
         
         for counter in range(num_blocks):
-            counter_block = counter.to_bytes(8, byteorder='big')
-            prg_block = cipher.encrypt(counter_block)
-            mask_bytes.extend(prg_block)
+            # FIX 2: Pass the counter directly as an integer
+            prg_block_int = cipher.encrypt(counter)
+            
+            # FIX 3: Convert the resulting integer back into 8 bytes
+            mask_bytes.extend(prg_block_int.to_bytes(8, byteorder='big'))
             
         prg_bytes = bytes(mask_bytes[:byte_length])
         return list(struct.unpack(f'{mask_length}f', prg_bytes))

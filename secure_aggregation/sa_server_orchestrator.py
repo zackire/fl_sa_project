@@ -2,6 +2,7 @@ import json
 import logging
 import base64
 from typing import List, Dict
+import numpy as np
 
 # Machine Learning Logic
 from fl_core.fedavg_logic import aggregate
@@ -31,8 +32,9 @@ class SecureAggregationServer:
         self.b_u_shares_pool: Dict[str, List[bytes]] = {}
         self.s_sk_shares_pool: Dict[str, List[bytes]] = {}
 
-        # FIX 1: Add State Machine Locks to prevent infinite broadcast loops
+        # State Machine Locks
         self.r1_received = set()
+        self.r3_received = set() 
         self.r2_triggered = False
         self.r3_triggered = False
         self.finalized = False
@@ -94,17 +96,14 @@ class SecureAggregationServer:
             topic = PayloadBuilder.get_client_inbox_topic(target_client_id)
             self.mqtt.publish(topic, routed_payload)
             
-        # FIX 2: Track who actually sent shares instead of relying on active_clients
         self.r1_received.add(source_client_id)
             
-        # FIX 3: Apply boolean lock to prevent multiple triggers
         if len(self.r1_received) == self.expected_k and not self.r2_triggered: 
             self.r2_triggered = True
             self._trigger_round_2()
 
     def _trigger_round_2(self):
         logging.info(f"[Server] Share routing complete. Initiating Round 2 (Training)...")
-        # FIX 4: Remove ghost datasets (X_train/y_train) and rename to "global_weights"
         payload = json.dumps({
             "meta": {"msg_type": "global_model", "round": 2},
             "data": {"global_weights": []}
@@ -116,6 +115,10 @@ class SecureAggregationServer:
     # ROUND 2: MASKED INPUT COLLECTION
     # ==========================================
     def _execute_round_2(self, client_id: str, data: dict):
+        if self.r3_triggered:
+            logging.warning(f"[Server] Ignoring late Round 2 payload from {client_id}. They are officially dropped.")
+            return
+
         if "masked_weights" not in data:
             return
             
@@ -125,8 +128,7 @@ class SecureAggregationServer:
         if self._known_mask_length is None:
             self._known_mask_length = data.get('mask_length', len(data['masked_weights']))
         
-        # FIX 5: Apply boolean lock
-        if len(self.surviving_clients) >= self.t_threshold and not self.r3_triggered:
+        if len(self.surviving_clients) == self.expected_k and not self.r3_triggered:
             self.r3_triggered = True
             self._trigger_round_3()
 
@@ -146,37 +148,48 @@ class SecureAggregationServer:
         if "recovery_payload" not in data:
             return
             
+        self.r3_received.add(client_id) 
+        
         recovery_payload = data["recovery_payload"]
         
         for target_id, b64_share in recovery_payload.get("b_u_shares", {}).items():
-            self.b_u_shares_pool.setdefault(target_id, []).append(base64.b64decode(b64_share))
+            share_data = base64.b64decode(b64_share) if isinstance(b64_share, str) else bytes(b64_share)
+            self.b_u_shares_pool.setdefault(target_id, []).append(share_data)
             
         for target_id, b64_share in recovery_payload.get("s_sk_shares", {}).items():
-            self.s_sk_shares_pool.setdefault(target_id, []).append(base64.b64decode(b64_share))
+            share_data = base64.b64decode(b64_share) if isinstance(b64_share, str) else bytes(b64_share)
+            self.s_sk_shares_pool.setdefault(target_id, []).append(share_data)
             
-        # FIX 6: Apply boolean lock
-        if len(self.b_u_shares_pool) >= len(self.surviving_clients) and not self.finalized: 
+        if len(self.r3_received) == len(self.surviving_clients) and not self.finalized: 
             self.finalized = True
             self._finalize_aggregation()
 
     def _finalize_aggregation(self):
         logging.info("[Server] Threshold reached. Executing final unmasking cryptography...")
         
-        # 1. Sum all received Y_u vectors
+        # 1. CREATE THE INITIAL SUM 
         final_sum = [sum(x) for x in zip(*self.y_u_payloads.values())]
         
         # 2. Cancel Survivor Self-Masks (b_u)
         for survivor_id in self.surviving_clients:
-            shares = self.b_u_shares_pool[survivor_id][:self.t_threshold]
-            b_u_seed = combine_shares(shares)
+            shares = self.b_u_shares_pool.get(survivor_id, [])
+            if len(shares) < self.t_threshold:
+                raise ValueError(f"Protocol abort: Not enough shares for survivor {survivor_id}. Got {len(shares)}, needed {self.t_threshold}.")
+                
+            b_u_seed = combine_shares(shares[:self.t_threshold])
             b_u_vector = self.crypto.generate_self_mask(b_u_seed, self._known_mask_length)
-            final_sum = [y - b for y, b in zip(final_sum, b_u_vector)]
+            
+            # Fast NumPy Subtraction
+            final_sum = list(np.array(final_sum) - np.array(b_u_vector))
 
         # 3. Cancel Dropped Client Pairwise Masks
         dropped_clients = self.active_clients - self.surviving_clients
         for dropped_id in dropped_clients:
-            shares = self.s_sk_shares_pool[dropped_id][:self.t_threshold]
-            s_sk_bytes = combine_shares(shares)
+            shares = self.s_sk_shares_pool.get(dropped_id, [])
+            if len(shares) < self.t_threshold:
+                raise ValueError(f"Protocol abort: Not enough shares for dropped {dropped_id}. Got {len(shares)}, needed {self.t_threshold}.")
+                
+            s_sk_bytes = combine_shares(shares[:self.t_threshold])
             dropped_sSK = x25519.X25519PrivateKey.from_private_bytes(s_sk_bytes)
             
             dropped_shared_seeds = {}
@@ -189,13 +202,17 @@ class SecureAggregationServer:
             
             for survivor_id, mask_vector in pairwise_masks.items():
                 survivor_sign = 1 if survivor_id > dropped_id else -1
-                final_sum = [y - (survivor_sign * m) for y, m in zip(final_sum, mask_vector)]
                 
+                # Fast NumPy Subtraction
+                final_sum = list(np.array(final_sum) - (survivor_sign * np.array(mask_vector)))
+
+        # 4. Translation & Machine Learning Hand-off
         logging.info("[Server] Cryptographic Unmasking Complete. Passing to FL Logic...")
         
-        # 4. Translation & Machine Learning Hand-off
         dequantized_flat_sum = dequantize([final_sum], clipping_range=10.0, target_range=2**24)[0]
-        final_model_ndarrays = reshape_list_to_ndarrays(dequantized_flat_sum, self.model_dimensions)
+        
+        flat_array = np.array(dequantized_flat_sum)
+        final_model_ndarrays = reshape_list_to_ndarrays(flat_array, self.model_dimensions)
         
         # Average and apply via FedAvg
         new_global_weights = aggregate(final_model_ndarrays, len(self.surviving_clients))

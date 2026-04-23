@@ -64,8 +64,9 @@ class Stack1Crypto(CryptoInterface):
         for target_id, seed in shared_mask_seeds.items():
             if seed is None:
                 raise ValueError(f"Seed for {target_id} is None.")
-            # INLINE: ChaCha20 PRG expansion
-            chacha_key = seed[:32] 
+            
+            # FIX: Pad the seed to exactly 32 bytes just in case
+            chacha_key = seed.rjust(32, b'\x00')[:32] 
             nonce = b'\x00' * 16  
             cipher = Cipher(algorithms.ChaCha20(chacha_key, nonce), mode=None) 
             encryptor = cipher.encryptor()
@@ -101,7 +102,9 @@ class Stack1Crypto(CryptoInterface):
             if b_u_share is None or s_sk_share is None or c_uv is None:
                 raise ValueError("None values passed to byte-strict encryption.")
             payload = pickle.dumps({"b_u_share": b_u_share, "s_sk_share": s_sk_share})
-            ascon_key = c_uv[:16] 
+            
+            # FIX: Enforce 16-byte extraction safely
+            ascon_key = c_uv.rjust(32, b'\x00')[:16] 
             nonce = os.urandom(16)
             
             # FIX 2: Change "Ascon-128" to "Ascon-AEAD128" to match your pyascon.py file
@@ -111,7 +114,8 @@ class Stack1Crypto(CryptoInterface):
     def decrypt_incoming_shares(self, source_client_id: str, ciphertext: bytes, c_uv: bytes) -> bytes:
             if ciphertext is None or c_uv is None:
                 raise ValueError("None values passed to byte-strict decryption.")
-            ascon_key = c_uv[:16]
+            
+            ascon_key = c_uv.rjust(32, b'\x00')[:16]
             nonce = ciphertext[:16]
             actual_ciphertext = ciphertext[16:]
             
@@ -133,8 +137,10 @@ class Stack1Crypto(CryptoInterface):
     def generate_self_mask(self, self_mask_seed: bytes, mask_length: int) -> List[float]:
         if self_mask_seed is None:
             raise ValueError("self_mask_seed cannot be None.")
-        # INLINE: ChaCha20 PRG expansion
-        chacha_key = self_mask_seed[:32] 
+        
+        # FIX: The Leading Zero Pad!
+        # Ensure the SSS reconstruction didn't strip leading zeros. ChaCha20 strictly demands 32 bytes.
+        chacha_key = self_mask_seed.rjust(32, b'\x00')[:32] 
         nonce = b'\x00' * 16  
         cipher = Cipher(algorithms.ChaCha20(chacha_key, nonce), mode=None) 
         encryptor = cipher.encryptor()

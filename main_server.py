@@ -24,16 +24,15 @@ def main():
 
     # Dynamic stack selection based on user input
     if args.stack == "A":
-        crypto_stack = Stack1Crypto
+        crypto_stack = Stack1Crypto("server")
     elif args.stack == "B":
-        crypto_stack = Stack2Crypto
+        crypto_stack = Stack2Crypto("server")
     else:
-        # This points to our fixed PRESENT + ChaChaPoly stack
-        crypto_stack = Stack3Crypto
+        crypto_stack = Stack3Crypto("server")
 
     mqtt_handler = MQTTServerHandler(
-        broker_ip=args.ip, # FIX 1: Use the IP passed in arguments
-        port=8883,         # FIX 2: Use TLS port as per your new docker-compose
+        broker_ip=args.ip, 
+        port=8883,         
         ca_path=args.ca,
         cert_path=args.cert,
         key_path=args.key
