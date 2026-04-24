@@ -8,6 +8,7 @@ services:
       - CLIENT_ID=${CLIENT_ID}
       - SERVER_IP=${SERVER_IP}
       - CRYPTO_STACK=${CRYPTO_STACK}
+      - PROTOCOL_MODE=${PROTOCOL_MODE:-secagg} 
     command: [
       "python", "main_client.py", 
       "--id", "${CLIENT_ID}", 

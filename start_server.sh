@@ -28,9 +28,17 @@ echo ""
 echo "GUIDE: Choose the encryption level:"
 echo "       A - X25519 + ChaCha20 + Ascon128"
 echo "       B - X25519 + SIMON + Ascon128"
-echo "       C - X25519 + PRESENT + ChaChaPoly "
-read -p "Enter Crypto Stack [A/B/C] (Press Enter to default to A): " input_stack
+echo "       C - X25519 + PRESENT + ChaChaPoly"
+echo "       N - No-Stack (Standard FL Baseline)"
+read -p "Enter Crypto Stack [A/B/C/N] (Press Enter to default to A): " input_stack
 input_stack=${input_stack:-A}
+
+if [ "$input_stack" == "N" ] || [ "$input_stack" == "n" ]; then
+    export PROTOCOL_MODE="baseline"
+    input_stack="A" 
+else
+    export PROTOCOL_MODE="secagg"
+fi
 
 echo "🔒 Checking for existing mTLS certificates for 'fl_server'..."
 if [ ! -d "certs/clients/fl_server" ]; then
@@ -41,12 +49,12 @@ else
 fi
 
 echo ""
-echo "🚀 Starting Mosquitto Broker and Aggregator Server (Expecting $input_k clients, Threshold: $input_t)..."
+echo "🚀 Starting Mosquitto Broker and Aggregator Server..."
 
-# Pass the variables inline and run compose
 EXPECTED_K=$input_k \
 THRESHOLD_T=$input_t \
 CRYPTO_STACK=$input_stack \
+PROTOCOL_MODE=$PROTOCOL_MODE \
 docker-compose -f docker-compose.server.yml up -d --build
 
 echo "Done! Run 'docker logs -f fl_server' to watch the server orchestrate the training round."

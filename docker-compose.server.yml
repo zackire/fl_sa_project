@@ -19,7 +19,8 @@ services:
     environment:
       - EXPECTED_K=${EXPECTED_K:-3}
       - THRESHOLD_T=${THRESHOLD_T:-2}
-      - CRYPTO_STACK=${CRYPTO_STACK:-C}
+      - CRYPTO_STACK=${CRYPTO_STACK:-A}
+      - PROTOCOL_MODE=${PROTOCOL_MODE:-secagg}
     volumes:
       - ./certs/clients/fl_server:/app/certs:ro
     command: ["sh", "-c", "python main_server.py --ip mqtt-broker --k $${EXPECTED_K} --t $${THRESHOLD_T} --stack $${CRYPTO_STACK} --ca /app/certs/ca.crt --cert /app/certs/client.crt --key /app/certs/client.key"]
@@ -28,4 +29,4 @@ services:
 
 networks:
   fl_shared_bridge:
-    external: true 
+    external: true
