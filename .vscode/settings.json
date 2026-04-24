@@ -1,6 +1,26 @@
 {
     "cSpell.words": [
-        "frombuffer"
+        "Acreateserial",
+        "associateddata",
+        "Bonawitz",
+        "cafile",
+        "certfile",
+        "Cxof",
+        "frombuffer",
+        "genpkey",
+        "hashlength",
+        "keygen",
+        "msgblocksize",
+        "pkeyopt",
+        "printstate",
+        "printwords",
+        "PRNG",
+        "pyascon",
+        "pycache",
+        "taglen",
+        "taglength",
+        "tagspec",
+        "venv"
     ],
     "python-envs.defaultEnvManager": "ms-python.python:pyenv"
 }

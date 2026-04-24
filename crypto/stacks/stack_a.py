@@ -1,15 +1,15 @@
 import os
 import pickle
 import struct
-import ascon
 from typing import Dict, List, Tuple
 
 from crypto.interface import CryptoInterface
+from crypto.stacks.algorithms import ascon
 from cryptography.hazmat.primitives.asymmetric import x25519 # type: ignore
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 
 # Importing the SSS logic provided by the Flower adapter
-from flower_secagg_utils import create_shares
+from secure_aggregation.flower_secagg_utils import create_shares
 
 class Stack1Crypto(CryptoInterface):
     def __init__(self, my_client_id: str):
@@ -41,6 +41,10 @@ class Stack1Crypto(CryptoInterface):
     # ==========================================
 
     def compute_shared_secrets(self, external_public_keys: Dict[str, Dict[str, bytes]]) -> Dict[str, Dict[str, bytes]]:
+        if self._cSK is None or self._sSK is None:
+            raise ValueError("Keypairs not generated.")
+        if external_public_keys is None:
+            raise ValueError("external_public_keys cannot be None.")
         shared_secrets = {}
         for target_id, keys in external_public_keys.items():
             target_cPK = x25519.X25519PublicKey.from_public_bytes(keys["cPK"])
@@ -54,10 +58,15 @@ class Stack1Crypto(CryptoInterface):
         return shared_secrets
 
     def generate_pairwise_masks(self, shared_mask_seeds: Dict[str, bytes], mask_length: int) -> Dict[str, List[float]]:
+        if shared_mask_seeds is None:
+            raise ValueError("shared_mask_seeds cannot be None.")
         masks = {}
         for target_id, seed in shared_mask_seeds.items():
-            # INLINE: ChaCha20 PRG expansion
-            chacha_key = seed[:32] 
+            if seed is None:
+                raise ValueError(f"Seed for {target_id} is None.")
+            
+            # FIX: Pad the seed to exactly 32 bytes just in case
+            chacha_key = seed.rjust(32, b'\x00')[:32] 
             nonce = b'\x00' * 16  
             cipher = Cipher(algorithms.ChaCha20(chacha_key, nonce), mode=None) 
             encryptor = cipher.encryptor()
@@ -74,6 +83,8 @@ class Stack1Crypto(CryptoInterface):
         return self._b_u
 
     def generate_shamir_shares(self, threshold: int, total_shares: int) -> Dict[str, List[Tuple[int, bytes]]]:
+        if self._b_u is None or self._sSK is None:
+            raise ValueError("Secrets not generated.")
         # INLINE: Utilizing Flower's SSS
         b_u_shares_raw = create_shares(self._b_u, threshold, total_shares)
         s_sk_shares_raw = create_shares(self._sSK.private_bytes_raw(), threshold, total_shares)
@@ -88,35 +99,48 @@ class Stack1Crypto(CryptoInterface):
         }
 
     def encrypt_shares_for_routing(self, target_client_id: str, b_u_share: bytes, s_sk_share: bytes, c_uv: bytes) -> bytes:
-        payload = pickle.dumps({"b_u_share": b_u_share, "s_sk_share": s_sk_share})
-        ascon_key = c_uv[:16] 
-        nonce = os.urandom(16)
-        
-        ciphertext = ascon.ascon_encrypt(ascon_key, nonce, b"", payload, variant="Ascon-128")
-        return nonce + ciphertext
+            if b_u_share is None or s_sk_share is None or c_uv is None:
+                raise ValueError("None values passed to byte-strict encryption.")
+            payload = pickle.dumps({"b_u_share": b_u_share, "s_sk_share": s_sk_share})
+            
+            # FIX: Enforce 16-byte extraction safely
+            ascon_key = c_uv.rjust(32, b'\x00')[:16] 
+            nonce = os.urandom(16)
+            
+            # FIX 2: Change "Ascon-128" to "Ascon-AEAD128" to match your pyascon.py file
+            ciphertext = ascon.ascon_encrypt(ascon_key, nonce, b"", payload, variant="Ascon-AEAD128")
+            return nonce + ciphertext
 
     def decrypt_incoming_shares(self, source_client_id: str, ciphertext: bytes, c_uv: bytes) -> bytes:
-        ascon_key = c_uv[:16]
-        nonce = ciphertext[:16]
-        actual_ciphertext = ciphertext[16:]
-        
-        plaintext = ascon.ascon_decrypt(ascon_key, nonce, b"", actual_ciphertext, variant="Ascon-128")
-        if plaintext is None:
-            raise ValueError("Authentication tag verification failed.")
+            if ciphertext is None or c_uv is None:
+                raise ValueError("None values passed to byte-strict decryption.")
             
-        shares = pickle.loads(plaintext)
-        self._held_b_u_shares[source_client_id] = shares["b_u_share"]
-        self._held_s_sk_shares[source_client_id] = shares["s_sk_share"]
-        
-        return plaintext
+            ascon_key = c_uv.rjust(32, b'\x00')[:16]
+            nonce = ciphertext[:16]
+            actual_ciphertext = ciphertext[16:]
+            
+            # FIX 3: Change "Ascon-128" to "Ascon-AEAD128"
+            plaintext = ascon.ascon_decrypt(ascon_key, nonce, b"", actual_ciphertext, variant="Ascon-AEAD128")
+            if plaintext is None:
+                raise ValueError("Authentication tag verification failed.")
+                
+            shares = pickle.loads(plaintext)
+            self._held_b_u_shares[source_client_id] = shares["b_u_share"]
+            self._held_s_sk_shares[source_client_id] = shares["s_sk_share"]
+            
+            return plaintext
 
     # ==========================================
     # ROUND 2: MASKED INPUT GENERATION
     # ==========================================
 
     def generate_self_mask(self, self_mask_seed: bytes, mask_length: int) -> List[float]:
-        # INLINE: ChaCha20 PRG expansion
-        chacha_key = self_mask_seed[:32] 
+        if self_mask_seed is None:
+            raise ValueError("self_mask_seed cannot be None.")
+        
+        # FIX: The Leading Zero Pad!
+        # Ensure the SSS reconstruction didn't strip leading zeros. ChaCha20 strictly demands 32 bytes.
+        chacha_key = self_mask_seed.rjust(32, b'\x00')[:32] 
         nonce = b'\x00' * 16  
         cipher = Cipher(algorithms.ChaCha20(chacha_key, nonce), mode=None) 
         encryptor = cipher.encryptor()
@@ -125,6 +149,8 @@ class Stack1Crypto(CryptoInterface):
         return list(struct.unpack(f'{mask_length}f', prg_bytes))
 
     def compute_masked_input(self, raw_data_vector: List[float], b_u_vector: List[float], pairwise_masks: Dict[str, List[float]], active_users: List[str]) -> List[float]:
+        if raw_data_vector is None or b_u_vector is None or pairwise_masks is None or active_users is None:
+            raise ValueError("Masking inputs cannot be None.")
         # Vector Arithmetic: Summing raw data with the self-mask
         y_u = [r + b for r, b in zip(raw_data_vector, b_u_vector)]
         

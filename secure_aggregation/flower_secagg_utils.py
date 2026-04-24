@@ -13,6 +13,8 @@ from Crypto.Util.Padding import pad, unpad
 
 def create_shares(secret: bytes, threshold: int, num: int) -> list[bytes]:
     """Return a list of shares (bytes)."""
+    if secret is None:
+        raise ValueError("Secret cannot be None.")
     secret_padded = pad(secret, 16)
     chunks = [secret_padded[i : i + 16] for i in range(0, len(secret_padded), 16)]
     share_list: list[bytearray] = [bytearray() for _ in range(num)]
@@ -32,6 +34,11 @@ def _shamir_split(threshold: int, num: int, chunk: bytes) -> list[tuple[int, byt
 
 def combine_shares(share_list: list[bytes]) -> bytes:
     """Reconstruct the secret from a list of shares."""
+    if not share_list:
+        raise ValueError("Share list cannot be None or empty.")
+    for share in share_list:
+        if share is None:
+            raise ValueError("Individual share cannot be None.")
     chunk_num = (len(share_list[0]) - 4) >> 4
     secret_padded = bytearray(0)
     chunk_shares_list: list[list[tuple[int, bytes]]] = [[] for _ in range(chunk_num)]
@@ -88,10 +95,12 @@ def dequantize(
     quantizer = (2 * clipping_range) / target_range
     shift = -clipping_range
     for arr in quantized_parameters:
-        recon_arr = arr.view(np.ndarray).astype(float)
+        # Replaced arr.view(np.ndarray) with np.array(arr) to safely accept our flat lists
+        recon_arr = np.array(arr).astype(float)
         recon_arr = recon_arr * quantizer + shift
         reverse_quantized_list.append(recon_arr)
     return reverse_quantized_list
+
 
 # ------------ Flower framework Source Code End ------------
 
@@ -103,6 +112,8 @@ def dequantize(
 
 def get_model_dimensions(parameters: List[np.ndarray]) -> List[Tuple[int, ...]]:
     """Extracts the exact structural dimensions of the ML model."""
+    if parameters is None:
+        raise ValueError("parameters cannot be None")
     return [arr.shape for arr in parameters]
 
 def flatten_ndarrays_to_list(parameters: List[np.ndarray]) -> List[float]:
@@ -110,6 +121,8 @@ def flatten_ndarrays_to_list(parameters: List[np.ndarray]) -> List[float]:
     Translates the ML multi-dimensional arrays into the flat 1D list 
     required by the CryptoInterface.
     """
+    if parameters is None:
+        raise ValueError("parameters cannot be None")
     flat_list = []
     for arr in parameters:
         flat_list.extend(arr.flatten().tolist())
@@ -120,6 +133,8 @@ def reshape_list_to_ndarrays(flat_vector: List[float], dimensions: List[Tuple[in
     Reconstructs the flat cryptographic output back into the 
     original multi-dimensional ML model structure.
     """
+    if flat_vector is None or dimensions is None:
+        raise ValueError("Inputs cannot be None")
     output_tensors = []
     current_idx = 0
     

@@ -1,18 +1,13 @@
 # Networking & Machine Learning Math
 paho-mqtt>=2.1.0
-numpy>=2.4.4
+numpy>=1.24.0
 
 # Protocol & ML Core Utilities
 scikit-learn>=1.0.0
 
 # Core Cryptography & SSS (Stacks & Utils)
-cryptography>=46.0.7
+cryptography>=41.0.0
 pycryptodome>=3.23.0
-
-# Lightweight AEAD Ciphers (Routing Encryption)
-ascon>=0.0.9
-gift-cofb>=1.0.0  
 
 # Lightweight PRG Block Ciphers (Mask Expansion)
 simonspeckciphers>=1.0.0
-present-cipher>=1.0.0
