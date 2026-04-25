@@ -11,3 +11,6 @@ pycryptodome>=3.23.0
 
 # Lightweight PRG Block Ciphers (Mask Expansion)
 simonspeckciphers>=1.0.0
+
+# Metrics — CPU / RAM sampling (metrics/metrics_collector.py)
+psutil>=5.9.0
