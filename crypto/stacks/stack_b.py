@@ -12,6 +12,8 @@ from secure_aggregation.flower_secagg_utils import create_shares
 
 
 class Stack2Crypto(CryptoInterface):
+    STACK_ID = "B"
+
     def __init__(self, my_client_id: str):
         self._my_id = my_client_id
         self._cSK = None

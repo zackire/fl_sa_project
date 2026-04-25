@@ -1,8 +1,6 @@
 import json
 import logging
-import time
 import numpy as np
-from communication.payload_builder import PayloadBuilder
 
 
 class VanillaFLClient:
@@ -18,7 +16,7 @@ class VanillaFLClient:
     # ---------------------------------------------------------------------- #
 
     def _check_in_with_server(self):
-        logging.info(f"[{self.client_id}] Checking in with Aggregator Server...")
+        logging.info(f"[{self.client_id}] Checking in with server...")
         payload = json.dumps({
             "meta": {"client_id": self.client_id, "msg_type": "checkin"}
         })
@@ -33,7 +31,8 @@ class VanillaFLClient:
         if msg_type == "global_model":
             self._handle_global_model(data)
         elif msg_type == "ignition":
-            logging.info(f"\n[{self.client_id}] IGNITION RECEIVED — Starting Round 1...")
+            round_num = meta.get("round", 1)
+            logging.info(f"[{self.client_id}] Ignition received — starting Round {round_num}.")
             self._send_weights()
 
     # ---------------------------------------------------------------------- #
@@ -45,11 +44,10 @@ class VanillaFLClient:
 
         if global_weights_list:
             global_weights = [np.array(w) for w in global_weights_list]
-            logging.info(f"\n[{self.client_id}] ====== RECEIVED GLOBAL MODEL ======")
-            self._log_weights("Received global weights", global_weights)
+            logging.info(f"[{self.client_id}] Global model received from server.")
+            _log_weights(self.client_id, global_weights, label="Global model")
             self.model.set_weights(global_weights)
 
-        # In vanilla baseline: no local training, send current weights directly
         self._send_weights()
 
     # ---------------------------------------------------------------------- #
@@ -58,9 +56,7 @@ class VanillaFLClient:
 
     def _send_weights(self):
         weights = self.model.get_weights()
-
-        logging.info(f"\n[{self.client_id}] ====== SENDING WEIGHTS TO SERVER ======")
-        self._log_weights("Outgoing weights (identical to initialised values)", weights)
+        _log_weights(self.client_id, weights, label="Sending weights to server")
 
         weights_list = [w.tolist() for w in weights]
         payload = json.dumps({
@@ -68,18 +64,16 @@ class VanillaFLClient:
             "data": {"weights": weights_list}
         })
         self.mqtt.publish(f"fl/client/{self.client_id}/to_server", payload)
-        logging.info(f"[{self.client_id}] Weights published ✓")
+        logging.info(f"[{self.client_id}] Weights published to server ✓")
 
-    # ---------------------------------------------------------------------- #
-    #  Helpers                                                                #
-    # ---------------------------------------------------------------------- #
 
-    def _log_weights(self, label: str, weights: list):
-        component_labels = ["coef", "intercept"]
-        logging.info(f"[{self.client_id}] {label}:")
-        for i, w in enumerate(weights):
-            lbl = component_labels[i] if i < len(component_labels) else f"component_{i}"
-            logging.info(
-                f"  [{lbl}] shape={w.shape} | values={np.round(w, 6)} | "
-                f"sum={np.sum(w):.6f} | L2={np.linalg.norm(w):.6f}"
-            )
+# ---------------------------------------------------------------------- #
+#  Shared logging helper                                                  #
+# ---------------------------------------------------------------------- #
+
+def _log_weights(client_id: str, weights: list, label: str = "Weights"):
+    component_labels = ["coef", "intercept"]
+    logging.info(f"[{client_id}] {label}:")
+    for i, w in enumerate(weights):
+        lbl = component_labels[i] if i < len(component_labels) else f"component_{i}"
+        logging.info(f"  [{lbl}]  {np.round(w, 6)}")
