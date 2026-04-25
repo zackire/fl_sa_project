@@ -89,11 +89,12 @@ def dequantize(
     quantized_parameters: list[np.ndarray],
     clipping_range: float,
     target_range: int,
+    num_survivors: int = 1
 ) -> list[np.ndarray]:
     """Dequantize integer Numpy arrays to float Numpy arrays."""
     reverse_quantized_list: list[np.ndarray] = []
     quantizer = (2 * clipping_range) / target_range
-    shift = -clipping_range
+    shift = -clipping_range * num_survivors
     for arr in quantized_parameters:
         # Replaced arr.view(np.ndarray) with np.array(arr) to safely accept our flat lists
         recon_arr = np.array(arr).astype(float)

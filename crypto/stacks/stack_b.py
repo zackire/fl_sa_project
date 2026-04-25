@@ -8,19 +8,15 @@ from crypto.stacks.algorithms import ascon
 from cryptography.hazmat.primitives.asymmetric import x25519
 from simon import SimonCipher
 
-# Importing the SSS logic provided by the Flower adapter
 from secure_aggregation.flower_secagg_utils import create_shares
+
 
 class Stack2Crypto(CryptoInterface):
     def __init__(self, my_client_id: str):
         self._my_id = my_client_id
-        
-        # Internal Secret Storage
         self._cSK = None
         self._sSK = None
         self._b_u = None
-        
-        # Storage for incoming Shamir shares 
         self._held_b_u_shares: Dict[str, bytes] = {}
         self._held_s_sk_shares: Dict[str, bytes] = {}
 
@@ -49,127 +45,114 @@ class Stack2Crypto(CryptoInterface):
         for target_id, keys in external_public_keys.items():
             target_cPK = x25519.X25519PublicKey.from_public_bytes(keys["cPK"])
             target_sPK = x25519.X25519PublicKey.from_public_bytes(keys["sPK"])
-            
             shared_secrets[target_id] = {
                 "c_uv": self._cSK.exchange(target_cPK),
-                "s_uv": self._sSK.exchange(target_sPK)
+                "s_uv": self._sSK.exchange(target_sPK),
             }
         return shared_secrets
 
-    def generate_pairwise_masks(self, shared_mask_seeds: Dict[str, bytes], mask_length: int) -> Dict[str, List[float]]:
+    def generate_pairwise_masks(self, shared_mask_seeds: Dict[str, bytes], mask_length: int) -> Dict[str, List[int]]:
         if shared_mask_seeds is None:
             raise ValueError("shared_mask_seeds cannot be None.")
         masks = {}
         byte_length = mask_length * 4
-        num_blocks = (byte_length + 15) // 16  
-        
+        num_blocks = (byte_length + 15) // 16  # SIMON-128 uses 16-byte blocks
+
         for target_id, seed in shared_mask_seeds.items():
             if seed is None:
                 raise ValueError(f"Seed for {target_id} is None.")
-            # INLINE: SIMON PRG expansion
-            simon_key_int = int.from_bytes(seed[:16], byteorder='big')
-            nonce_int = int.from_bytes(seed[16:32], byteorder='big')
-            
-            cipher = SimonCipher(simon_key_int, key_size=128, block_size=128, mode='CTR', init=nonce_int)
+
+            simon_key_int = int.from_bytes(seed[:16], byteorder="big")
+            nonce_int     = int.from_bytes(seed[16:32], byteorder="big")
+            cipher        = SimonCipher(simon_key_int, key_size=128, block_size=128, mode="CTR", init=nonce_int)
+
             mask_bytes = bytearray()
-            
             for _ in range(num_blocks):
                 prg_block_int = cipher.encrypt(0)
-                mask_bytes.extend(prg_block_int.to_bytes(16, byteorder='big'))
-            
+                mask_bytes.extend(prg_block_int.to_bytes(16, byteorder="big"))
+
             prg_bytes = bytes(mask_bytes[:byte_length])
-            masks[target_id] = list(struct.unpack(f'{mask_length}f', prg_bytes))
-            
+            # FIX: unpack as unsigned 32-bit integers, NOT floats
+            masks[target_id] = list(struct.unpack(f"{mask_length}I", prg_bytes))
+
         return masks
 
     def generate_self_mask_seed(self) -> bytes:
-        # Utilizing OS-PRNG for true entropy
         self._b_u = os.urandom(32)
         return self._b_u
 
     def generate_shamir_shares(self, threshold: int, total_shares: int) -> Dict[str, List[Tuple[int, bytes]]]:
         if self._b_u is None or self._sSK is None:
             raise ValueError("Secrets not generated.")
-        # INLINE: Utilizing Flower's SSS
-        b_u_shares_raw = create_shares(self._b_u, threshold, total_shares)
+        b_u_shares_raw  = create_shares(self._b_u, threshold, total_shares)
         s_sk_shares_raw = create_shares(self._sSK.private_bytes_raw(), threshold, total_shares)
-        
-        b_u_list = [(int.from_bytes(s[:4], "little", signed=False), s) for s in b_u_shares_raw]
-        s_sk_list = [(int.from_bytes(s[:4], "little", signed=False), s) for s in s_sk_shares_raw]
-        
-        return {
-            "b_u": b_u_list,
-            "s_sk": s_sk_list
-        }
+
+        b_u_list   = [(int.from_bytes(s[:4], "little", signed=False), s) for s in b_u_shares_raw]
+        s_sk_list  = [(int.from_bytes(s[:4], "little", signed=False), s) for s in s_sk_shares_raw]
+
+        return {"b_u": b_u_list, "s_sk": s_sk_list}
 
     def encrypt_shares_for_routing(self, target_client_id: str, b_u_share: bytes, s_sk_share: bytes, c_uv: bytes) -> bytes:
-            if b_u_share is None or s_sk_share is None or c_uv is None:
-                raise ValueError("None values passed to byte-strict encryption.")
-            payload = pickle.dumps({"b_u_share": b_u_share, "s_sk_share": s_sk_share})
-            ascon_key = c_uv[:16] 
-            nonce = os.urandom(16)
-            
-            # FIX 1: Change "Ascon-128a" to "Ascon-AEAD128"
-            # FIX 2: Ensure you are calling it from the local module
-            ciphertext = ascon.ascon_encrypt(ascon_key, nonce, b"", payload, variant="Ascon-AEAD128")
-            return nonce + ciphertext
+        if b_u_share is None or s_sk_share is None or c_uv is None:
+            raise ValueError("None values passed to byte-strict encryption.")
+        payload   = pickle.dumps({"b_u_share": b_u_share, "s_sk_share": s_sk_share})
+        ascon_key = c_uv[:16]
+        nonce     = os.urandom(16)
+        ciphertext = ascon.ascon_encrypt(ascon_key, nonce, b"", payload, variant="Ascon-AEAD128")
+        return nonce + ciphertext
 
     def decrypt_incoming_shares(self, source_client_id: str, ciphertext: bytes, c_uv: bytes) -> bytes:
-            if ciphertext is None or c_uv is None:
-                raise ValueError("None values passed to byte-strict decryption.")
-            ascon_key = c_uv[:16]
-            nonce = ciphertext[:16]
-            actual_ciphertext = ciphertext[16:]
-            
-            # FIX 3: Change "Ascon-128a" to "Ascon-AEAD128"
-            plaintext = ascon.ascon_decrypt(ascon_key, nonce, b"", actual_ciphertext, variant="Ascon-AEAD128")
-            if plaintext is None:
-                raise ValueError("Authentication tag verification failed.")
-                
-            shares = pickle.loads(plaintext)
-            self._held_b_u_shares[source_client_id] = shares["b_u_share"]
-            self._held_s_sk_shares[source_client_id] = shares["s_sk_share"]
-            
-            return plaintext
+        if ciphertext is None or c_uv is None:
+            raise ValueError("None values passed to byte-strict decryption.")
+        ascon_key         = c_uv[:16]
+        nonce             = ciphertext[:16]
+        actual_ciphertext = ciphertext[16:]
+        plaintext = ascon.ascon_decrypt(ascon_key, nonce, b"", actual_ciphertext, variant="Ascon-AEAD128")
+        if plaintext is None:
+            raise ValueError("Authentication tag verification failed.")
+        shares = pickle.loads(plaintext)
+        self._held_b_u_shares[source_client_id]  = shares["b_u_share"]
+        self._held_s_sk_shares[source_client_id] = shares["s_sk_share"]
+        return plaintext
+
     # ==========================================
     # ROUND 2: MASKED INPUT GENERATION
     # ==========================================
 
-    def generate_self_mask(self, self_mask_seed: bytes, mask_length: int) -> List[float]:
+    def generate_self_mask(self, self_mask_seed: bytes, mask_length: int) -> List[int]:
         if self_mask_seed is None:
             raise ValueError("self_mask_seed cannot be None.")
-        # INLINE: SIMON PRG expansion
+
         byte_length = mask_length * 4
-        num_blocks = (byte_length + 15) // 16 
-        
-        simon_key_int = int.from_bytes(self_mask_seed[:16], byteorder='big')
-        nonce_int = int.from_bytes(self_mask_seed[16:32], byteorder='big')
-        
-        cipher = SimonCipher(simon_key_int, key_size=128, block_size=128, mode='CTR', init=nonce_int)
+        num_blocks  = (byte_length + 15) // 16
+
+        simon_key_int = int.from_bytes(self_mask_seed[:16], byteorder="big")
+        nonce_int     = int.from_bytes(self_mask_seed[16:32], byteorder="big")
+        cipher        = SimonCipher(simon_key_int, key_size=128, block_size=128, mode="CTR", init=nonce_int)
+
         mask_bytes = bytearray()
-        
         for _ in range(num_blocks):
             prg_block_int = cipher.encrypt(0)
-            mask_bytes.extend(prg_block_int.to_bytes(16, byteorder='big'))
-            
-        prg_bytes = bytes(mask_bytes[:byte_length])
-        return list(struct.unpack(f'{mask_length}f', prg_bytes))
+            mask_bytes.extend(prg_block_int.to_bytes(16, byteorder="big"))
 
-    def compute_masked_input(self, raw_data_vector: List[float], b_u_vector: List[float], pairwise_masks: Dict[str, List[float]], active_users: List[str]) -> List[float]:
+        prg_bytes = bytes(mask_bytes[:byte_length])
+        # FIX: unpack as unsigned 32-bit integers, NOT floats
+        return list(struct.unpack(f"{mask_length}I", prg_bytes))
+
+    def compute_masked_input(self, raw_data_vector: List[int], b_u_vector: List[int], pairwise_masks: Dict[str, List[int]], active_users: List[str]) -> List[int]:
         if raw_data_vector is None or b_u_vector is None or pairwise_masks is None or active_users is None:
             raise ValueError("Masking inputs cannot be None.")
-        # Vector Arithmetic: Summing raw data with the self-mask
-        y_u = [r + b for r, b in zip(raw_data_vector, b_u_vector)]
-        
-        # Applying Bonawitz dropout cancellation logic with vector arithmetic
+
+        # FIX: enforce 32-bit modulo boundary — identical to Stack A
+        FIELD_MODULUS = 2**32
+        y_u = [(int(r) + b) % FIELD_MODULUS for r, b in zip(raw_data_vector, b_u_vector)]
+
         for target_id, mask in pairwise_masks.items():
             if target_id not in active_users:
                 continue
-            
-            # Lexicographical check to ensure opposite signs
             sign = 1 if self._my_id > target_id else -1
-            y_u = [y + (sign * m) for y, m in zip(y_u, mask)]
-            
+            y_u  = [(y + sign * m) % FIELD_MODULUS for y, m in zip(y_u, mask)]
+
         return y_u
 
     # ==========================================
@@ -180,7 +163,7 @@ class Stack2Crypto(CryptoInterface):
         shares_to_return = {}
         for user_id in surviving_users:
             if user_id in dropped_users_check:
-                raise ValueError(f"Protocol abort: Server illicitly requested b_u share for dropped user {user_id}")
+                raise ValueError(f"Protocol abort: b_u share requested for dropped user {user_id}")
             if user_id in self._held_b_u_shares:
                 shares_to_return[user_id] = self._held_b_u_shares[user_id]
         return shares_to_return
@@ -189,7 +172,7 @@ class Stack2Crypto(CryptoInterface):
         shares_to_return = {}
         for user_id in dropped_users:
             if user_id in surviving_users_check:
-                raise ValueError(f"Protocol abort: Server illicitly requested s_SK share for surviving user {user_id}")
+                raise ValueError(f"Protocol abort: s_SK share requested for surviving user {user_id}")
             if user_id in self._held_s_sk_shares:
                 shares_to_return[user_id] = self._held_s_sk_shares[user_id]
         return shares_to_return
