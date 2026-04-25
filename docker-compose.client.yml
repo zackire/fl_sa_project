@@ -20,6 +20,7 @@ services:
     ]
     volumes:
       - ./certs/clients/${CLIENT_ID}:/app/certs:ro
+      - ./:/app
     networks:
       - fl_network
 
