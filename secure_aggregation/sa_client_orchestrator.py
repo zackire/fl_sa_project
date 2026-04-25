@@ -10,11 +10,14 @@ from communication.payload_builder import PayloadBuilder
 
 
 class SecureAggregationClient:
-    def __init__(self, client_id: str, crypto_stack: CryptoInterface, mqtt_handler, ml_model):
+    def __init__(self, client_id: str, crypto_stack: CryptoInterface, mqtt_handler, ml_model,
+                 metrics=None):
         self.client_id = client_id
         self.crypto    = crypto_stack
         self.mqtt      = mqtt_handler
         self.ml_model  = ml_model
+        self.metrics   = metrics          # MetricsCollector | None
+        self.round_number = 1
 
         # Cryptographic state
         self.public_keys        = {}
@@ -61,6 +64,13 @@ class SecureAggregationClient:
         self.received_shares_from.clear()
         _section_header(self.client_id, "ROUND 0 — KEY GENERATION")
 
+        # Metrics: start the measurement window at the very beginning of the round
+        if self.metrics:
+            self.metrics.round_start(self.round_number)
+            logging.info(
+                f"[Metrics][{self.client_id}] Round {self.round_number} measurement started (R0 ignition)"
+            )
+
         c_keys = self.crypto.generate_dh_encryption_keypair()
         s_keys = self.crypto.generate_dh_masking_keypair()
 
@@ -70,7 +80,7 @@ class SecureAggregationClient:
         }
 
         payload = PayloadBuilder.build_round_0_payload(self.client_id, pub_keys)
-        self.mqtt.publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
+        self._publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
         logging.info(f"[{self.client_id}] DH keypairs generated. Public keys sent to server.")
 
     # ---------------------------------------------------------------------- #
@@ -124,7 +134,7 @@ class SecureAggregationClient:
             encrypted_shares_payload[target_id] = base64.b64encode(ciphertext).decode("utf-8")
 
         payload = PayloadBuilder.build_round_1_payload(self.client_id, encrypted_shares_payload)
-        self.mqtt.publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
+        self._publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
         logging.info(
             f"[{self.client_id}] Encrypted Shamir shares sent to server for routing  "
             f"→  {list(encrypted_shares_payload.keys())}"
@@ -198,7 +208,7 @@ class SecureAggregationClient:
         logging.info(f"[{self.client_id}] Masks applied. Sending masked weights to server.")
 
         payload = PayloadBuilder.build_round_2_payload(self.client_id, y_u, mask_length)
-        self.mqtt.publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
+        self._publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
         logging.info(f"[{self.client_id}] Masked input Y_u published ✓")
 
     # ---------------------------------------------------------------------- #
@@ -226,8 +236,25 @@ class SecureAggregationClient:
         }
 
         payload = PayloadBuilder.build_round_3_payload(self.client_id, recovery_payload)
-        self.mqtt.publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
+        self._publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
         logging.info(f"[{self.client_id}] Recovery shares sent to server ✓")
+
+        # Metrics: end the measurement window — client's last action this round
+        if self.metrics:
+            self.metrics.round_end(self.round_number)
+            logging.info(
+                f"[Metrics][{self.client_id}] Round {self.round_number} measurement ended (R3 done)"
+            )
+        self.round_number += 1
+
+    # ---------------------------------------------------------------------- #
+    #  MQTT publish wrapper (tracks bandwidth)                                #
+    # ---------------------------------------------------------------------- #
+
+    def _publish(self, topic: str, payload: str):
+        if self.metrics:
+            self.metrics.record_bytes(len(payload.encode("utf-8")))
+        self.mqtt.publish(topic, payload)
 
 
 # ---------------------------------------------------------------------- #

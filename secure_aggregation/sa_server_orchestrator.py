@@ -82,6 +82,17 @@ class SecureAggregationServer:
         if "public_keys" not in data:
             return
 
+        # Metrics: start the round clock when the FIRST public key arrives
+        # so the measurement window covers all 4 SA phases:
+        #   R0 collect public keys → R1 route encrypted shares
+        #   → R2 collect masked inputs → R3 collect recovery shares
+        if len(self.active_clients) == 0 and self.metrics:
+            self.metrics.round_start(self.round_number)
+            logging.info(
+                f"[Metrics] Round {self.round_number} measurement started "
+                f"(first public key from {client_id})"
+            )
+
         self.public_keys_registry[client_id] = data["public_keys"]
         self.active_clients.add(client_id)
         logging.info(
@@ -129,10 +140,6 @@ class SecureAggregationServer:
 
     def _trigger_round_2(self):
         _section_header(f"ROUND {self.round_number} — BROADCASTING GLOBAL MODEL")
-
-        # Metrics: round officially starts when server sends the global model prompt
-        if self.metrics:
-            self.metrics.round_start(self.round_number)
 
         time.sleep(1)
 

@@ -8,6 +8,7 @@ from communication.mqtt_client_handler import MQTTClientHandler
 from secure_aggregation.sa_client_orchestrator import SecureAggregationClient
 from fl_baseline.vanillaFL_client import VanillaFLClient
 from fl_core.model import MockSecAggModel
+from metrics.metrics_collector import MetricsCollector
 
 from crypto.stacks.stack_a import Stack1Crypto
 from crypto.stacks.stack_b import Stack2Crypto
@@ -22,10 +23,20 @@ def main():
     parser.add_argument("--ca",    type=str, default="/app/certs/ca.crt")
     parser.add_argument("--cert",  type=str, default="/app/certs/client.crt")
     parser.add_argument("--key",   type=str, default="/app/certs/client.key")
+    parser.add_argument("--results-dir", type=str, default="metrics/results",
+                        help="Directory to write metrics CSV files (default: metrics/results/)")
     args = parser.parse_args()
 
     logger = setup_custom_logger(args.id)
     mode   = os.getenv("PROTOCOL_MODE", "secagg").lower()
+
+    # ── Determine metric label ──────────────────────────────────────────────
+    if mode == "baseline":
+        metric_mode = f"baseline_{args.id}"
+    else:
+        metric_mode = f"stack_{args.stack.lower()}_{args.id}"
+
+    collector = MetricsCollector(mode=metric_mode, output_dir=args.results_dir)
 
     try:
         mqtt_handler = MQTTClientHandler(
@@ -60,6 +71,7 @@ def main():
                 mqtt_handler=mqtt_handler,
                 crypto_stack=crypto_stack,
                 ml_model=ml_model,
+                metrics=collector,
             )
 
         mqtt_handler.set_orchestrator(orchestrator)
@@ -80,6 +92,7 @@ def main():
         logger.error(f"Error: {e}")
         sys.exit(1)
     except KeyboardInterrupt:
+        collector.print_summary()
         mqtt_handler.stop()
 
 
