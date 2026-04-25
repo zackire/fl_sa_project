@@ -22700,3 +22700,42 @@
 2026-04-25 19:50:06,865 - [root] - INFO - ────────────────────────────────────────────────────────────
 2026-04-25 19:50:06,866 - [root] - INFO - [client3] Survivors: ['client3', 'client1', 'client2']  |  Dropped: none
 2026-04-25 19:50:06,868 - [root] - INFO - [client3] Recovery shares sent to server ✓
+2026-04-25 19:50:19,418 - [root] - INFO - 
+────────────────────────────────────────────────────────────
+2026-04-25 19:50:19,430 - [root] - INFO -   [client3] ROUND 0 — KEY GENERATION
+2026-04-25 19:50:19,432 - [root] - INFO - ────────────────────────────────────────────────────────────
+2026-04-25 19:50:19,457 - [root] - INFO - [client3] DH keypairs generated. Public keys sent to server.
+2026-04-25 19:50:20,541 - [root] - INFO - 
+────────────────────────────────────────────────────────────
+2026-04-25 19:50:20,542 - [root] - INFO -   [client3] ROUND 1 — SHARE DISTRIBUTION
+2026-04-25 19:50:20,543 - [root] - INFO - ────────────────────────────────────────────────────────────
+2026-04-25 19:50:20,543 - [root] - INFO - [client3] Active users: ['client3', 'client1', 'client2']  |  threshold: 2/3
+2026-04-25 19:50:20,573 - [root] - INFO - [client3] Encrypted Shamir shares sent to server for routing  →  ['client1', 'client2']
+2026-04-25 19:50:21,707 - [root] - INFO - [client3] Share received and decrypted from client2  (1/2)
+2026-04-25 19:50:21,712 - [root] - INFO - [client3] Share received and decrypted from client1  (2/2)
+2026-04-25 19:50:21,715 - [root] - INFO - 
+────────────────────────────────────────────────────────────
+2026-04-25 19:50:21,716 - [root] - INFO -   [client3] ROUND 2 — MASKED INPUT GENERATION
+2026-04-25 19:50:21,716 - [root] - INFO - ────────────────────────────────────────────────────────────
+2026-04-25 19:50:21,719 - [root] - INFO - [client3] Global model received from server.
+2026-04-25 19:50:21,721 - [root] - INFO - [client3] Global model:
+2026-04-25 19:50:21,732 - [root] - INFO -   [coef]  [-0.166667 -0.066665  0.033333  0.133334  0.233334  0.333333  0.433333
+  0.533334  0.633334  0.733334]
+2026-04-25 19:50:21,733 - [root] - INFO -   [intercept]  [0.]
+2026-04-25 19:50:21,733 - [root] - INFO - [client3] Weights updated from global model:
+2026-04-25 19:50:21,734 - [root] - INFO - [client3]   coef      = [-0.166667 -0.066665  0.033333  0.133334  0.233334  0.333333  0.433333
+  0.533334  0.633334  0.733334]
+2026-04-25 19:50:21,735 - [root] - INFO - [client3]   intercept = [0.]
+2026-04-25 19:50:23,743 - [root] - INFO - [client3] Local weights (plaintext):
+2026-04-25 19:50:23,759 - [root] - INFO -   [coef]  [-0.166667 -0.066665  0.033333  0.133334  0.233334  0.333333  0.433333
+  0.533334  0.633334  0.733334]
+2026-04-25 19:50:23,759 - [root] - INFO -   [intercept]  [0.]
+2026-04-25 19:50:23,770 - [root] - INFO - [client3] Weights quantized and flattened  →  11 integers.
+2026-04-25 19:50:23,795 - [root] - INFO - [client3] Masks applied. Sending masked weights to server.
+2026-04-25 19:50:23,805 - [root] - INFO - [client3] Masked input Y_u published ✓
+2026-04-25 19:50:24,864 - [root] - INFO - 
+────────────────────────────────────────────────────────────
+2026-04-25 19:50:24,868 - [root] - INFO -   [client3] ROUND 3 — UNMASKING
+2026-04-25 19:50:24,869 - [root] - INFO - ────────────────────────────────────────────────────────────
+2026-04-25 19:50:24,870 - [root] - INFO - [client3] Survivors: ['client3', 'client1', 'client2']  |  Dropped: none
+2026-04-25 19:50:24,879 - [root] - INFO - [client3] Recovery shares sent to server ✓

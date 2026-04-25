@@ -30989,3 +30989,59 @@ FileNotFoundError: [Errno 2] No such file or directory: 'results/metrics_stack_b
 ────────────────────────────────────────────────────────────
 2026-04-25 19:50:06,934 - [root] - INFO -   ROUND 158 — SECURE AGGREGATION
 2026-04-25 19:50:06,934 - [root] - INFO - ────────────────────────────────────────────────────────────
+2026-04-25 19:50:08,938 - [root] - INFO - [Server] Summing 3 masked inputs (mod 2^32)...
+2026-04-25 19:50:08,940 - [root] - INFO - [Server] Removing self-masks (b_u) for each survivor...
+2026-04-25 19:50:09,001 - [root] - INFO - [Server] Dequantizing integer sum to float weights...
+2026-04-25 19:50:09,004 - [root] - INFO - [Server] Applying FedAvg  (÷ K=3)...
+2026-04-25 19:50:09,310 - [root] - INFO - 
+────────────────────────────────────────────────────────────
+2026-04-25 19:50:09,310 - [root] - INFO -   ROUND 158 — RESULT
+2026-04-25 19:50:09,310 - [root] - INFO - ────────────────────────────────────────────────────────────
+2026-04-25 19:50:09,310 - [root] - INFO - [Server] New Global Model (FedAvg via SecAgg):
+2026-04-25 19:50:09,313 - [root] - INFO -   [Global model]  [coef]  [-0.166667 -0.066665  0.033333  0.133334  0.233334  0.333333  0.433333
+  0.533334  0.633334  0.733334]
+2026-04-25 19:50:09,314 - [root] - INFO -   [Global model]  [intercept]  [0.]
+2026-04-25 19:50:09,314 - [root] - INFO - [Server] Next round in 10 s  →  Round 159
+2026-04-25 19:50:19,336 - [root] - INFO - 
+────────────────────────────────────────────────────────────
+2026-04-25 19:50:19,356 - [root] - INFO -   ROUND 159 — START
+2026-04-25 19:50:19,356 - [root] - INFO - ────────────────────────────────────────────────────────────
+2026-04-25 19:50:19,511 - [root] - INFO - [Server] R0 — Public keys received from client3  (1/3)
+2026-04-25 19:50:19,512 - [root] - INFO - [Server] R0 — Public keys received from client1  (2/3)
+2026-04-25 19:50:19,513 - [root] - INFO - [Server] R0 — Public keys received from client2  (3/3)
+2026-04-25 19:50:19,513 - [root] - INFO - [Server] All public keys collected. Broadcasting key registry (Stack C)...
+2026-04-25 19:50:20,619 - [root] - INFO - [Server] R1 — Shares from client2 routed  →  ['client3', 'client1']
+2026-04-25 19:50:20,621 - [root] - INFO - [Server] R1 — Shares from client3 routed  →  ['client1', 'client2']
+2026-04-25 19:50:20,622 - [root] - INFO - [Server] R1 — Shares from client1 routed  →  ['client3', 'client2']
+2026-04-25 19:50:20,622 - [root] - INFO - 
+────────────────────────────────────────────────────────────
+2026-04-25 19:50:20,622 - [root] - INFO -   ROUND 159 — BROADCASTING GLOBAL MODEL
+2026-04-25 19:50:20,623 - [root] - INFO - ────────────────────────────────────────────────────────────
+2026-04-25 19:50:21,633 - [root] - INFO - [Server] Sending current global model to all clients.
+2026-04-25 19:50:21,656 - [root] - INFO -   [Global model (broadcast)]  [coef]  [-0.166667 -0.066665  0.033333  0.133334  0.233334  0.333333  0.433333
+  0.533334  0.633334  0.733334]
+2026-04-25 19:50:21,658 - [root] - INFO -   [Global model (broadcast)]  [intercept]  [0.]
+2026-04-25 19:50:23,828 - [root] - INFO - [Server] R2 — Masked input received from client3  (1/3)
+2026-04-25 19:50:23,829 - [root] - INFO - [Server] R2 — Masked input received from client2  (2/3)
+2026-04-25 19:50:23,830 - [root] - INFO - [Server] R2 — Masked input received from client1  (3/3)
+2026-04-25 19:50:23,830 - [root] - INFO - [Server] All masked inputs collected. Requesting unmasking shares...
+2026-04-25 19:50:24,912 - [root] - INFO - [Server] R3 — Recovery shares received from client2  (1/3)
+2026-04-25 19:50:24,915 - [root] - INFO - [Server] R3 — Recovery shares received from client1  (2/3)
+2026-04-25 19:50:24,922 - [root] - INFO - [Server] R3 — Recovery shares received from client3  (3/3)
+2026-04-25 19:50:24,922 - [root] - INFO - 
+────────────────────────────────────────────────────────────
+2026-04-25 19:50:24,922 - [root] - INFO -   ROUND 159 — SECURE AGGREGATION
+2026-04-25 19:50:24,922 - [root] - INFO - ────────────────────────────────────────────────────────────
+2026-04-25 19:50:26,931 - [root] - INFO - [Server] Summing 3 masked inputs (mod 2^32)...
+2026-04-25 19:50:26,934 - [root] - INFO - [Server] Removing self-masks (b_u) for each survivor...
+2026-04-25 19:50:26,970 - [root] - INFO - [Server] Dequantizing integer sum to float weights...
+2026-04-25 19:50:26,972 - [root] - INFO - [Server] Applying FedAvg  (÷ K=3)...
+2026-04-25 19:50:27,277 - [root] - INFO - 
+────────────────────────────────────────────────────────────
+2026-04-25 19:50:27,277 - [root] - INFO -   ROUND 159 — RESULT
+2026-04-25 19:50:27,277 - [root] - INFO - ────────────────────────────────────────────────────────────
+2026-04-25 19:50:27,278 - [root] - INFO - [Server] New Global Model (FedAvg via SecAgg):
+2026-04-25 19:50:27,279 - [root] - INFO -   [Global model]  [coef]  [-0.166667 -0.066665  0.033333  0.133334  0.233334  0.333333  0.433333
+  0.533334  0.633334  0.733334]
+2026-04-25 19:50:27,280 - [root] - INFO -   [Global model]  [intercept]  [0.]
+2026-04-25 19:50:27,280 - [root] - INFO - [Server] Next round in 10 s  →  Round 160
