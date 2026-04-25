@@ -2,11 +2,11 @@ import argparse
 import time
 import os
 import logging
+import json
+import threading
 from communication.logger_utils import setup_custom_logger
 from communication.mqtt_server_handler import MQTTServerHandler
 from secure_aggregation.sa_server_orchestrator import SecureAggregationServer
-
-# NEW: Import Baseline Orchestrator
 from fl_baseline.vanillaFL_server import VanillaFLServer
 
 from crypto.stacks.stack_a import Stack1Crypto 
@@ -59,18 +59,6 @@ def main():
     
     mqtt_handler.set_orchestrator(orchestrator)
     mqtt_handler.start()
-
-    # Admin Trigger for the VERY FIRST ROUND
-    def start_trigger():
-        logger.info("\n[ADMIN] Waiting 5 seconds before igniting the First Training Round...")
-        time.sleep(5)
-        import json
-        payload = json.dumps({"meta": {"msg_type": "ignition", "round": 0}, "data": {}})
-        mqtt_handler.publish("fl/server/broadcast", payload)
-        logger.info("Ignition sent.")
-
-    import threading
-    threading.Thread(target=start_trigger, daemon=True).start()
 
     try:
         while True:

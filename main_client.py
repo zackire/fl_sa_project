@@ -42,7 +42,7 @@ def main():
             key_path=args.key
         )
         
-        ml_model = MockSecAggModel(num_features=10)
+        ml_model = MockSecAggModel(client_id=args.id, num_features=10)
 
         if mode == "baseline":
             logger.info(f"--- [{args.id}] BOOTING IN VANILLA FL MODE ---")
