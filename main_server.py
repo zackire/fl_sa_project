@@ -24,8 +24,8 @@ def main():
     parser.add_argument("--ca",    type=str, required=False)
     parser.add_argument("--cert",  type=str, required=False)
     parser.add_argument("--key",   type=str, required=False)
-    parser.add_argument("--results-dir", type=str, default="results",
-                        help="Directory to write metrics CSV files (default: results/)")
+    parser.add_argument("--results-dir", type=str, default="metrics/results",
+                        help="Directory to write metrics CSV files (default: metrics/results/)")
     args = parser.parse_args()
 
     logger = setup_custom_logger("server")
