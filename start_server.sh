@@ -49,6 +49,9 @@ else
 fi
 
 echo ""
+echo "🌐 Ensuring Docker network 'fl_shared_bridge' exists..."
+docker network inspect fl_shared_bridge >/dev/null 2>&1 || docker network create fl_shared_bridge
+
 echo "🚀 Starting Mosquitto Broker and Aggregator Server..."
 
 EXPECTED_K=$input_k \
