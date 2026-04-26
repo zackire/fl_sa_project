@@ -99,6 +99,12 @@ class SecureAggregationServer:
 
         self.public_keys_registry[client_id] = data["public_keys"]
         self.active_clients.add(client_id)
+
+        cPK_b64 = data["public_keys"].get("cPK", "N/A")
+        sPK_b64 = data["public_keys"].get("sPK", "N/A")
+        logging.info(f"[Server] R0 — {client_id} registered cPK (base64): {cPK_b64}")
+        logging.info(f"[Server] R0 — {client_id} registered sPK (base64): {sPK_b64}")
+
         logging.info(
             f"[Server] R0 — Public keys received from {client_id}  "
             f"({len(self.active_clients)}/{self.expected_k})"
@@ -130,6 +136,7 @@ class SecureAggregationServer:
 
         recipients = list(data["encrypted_shares"].keys())
         for target_id, ciphertext_b64 in data["encrypted_shares"].items():
+            logging.info(f"[Server] R1 Routing — {source_id} -> {target_id} | ciphertext (base64): {ciphertext_b64}")
             routed = PayloadBuilder.build_round_1_payload(source_id, {target_id: ciphertext_b64})
             self._publish(PayloadBuilder.get_client_inbox_topic(target_id), routed)
 
@@ -172,6 +179,8 @@ class SecureAggregationServer:
         self.y_u_payloads[client_id] = data["masked_weights"]
         self.surviving_clients.add(client_id)
 
+        logging.info(f"[Server] R2 — Y_u received from {client_id} (first 5 int): {data['masked_weights'][:5]}...")
+
         if self._known_mask_length is None:
             self._known_mask_length = data.get("mask_length", len(data["masked_weights"]))
 
@@ -212,10 +221,12 @@ class SecureAggregationServer:
         for target_id, b64_share in recovery.get("b_u_shares", {}).items():
             share = base64.b64decode(b64_share) if isinstance(b64_share, str) else bytes(b64_share)
             self.b_u_shares_pool.setdefault(target_id, []).append(share)
+            logging.info(f"[Server] R3 <- Received b_u share for target {target_id} from {client_id}: {share.hex()}")
 
         for target_id, b64_share in recovery.get("s_sk_shares", {}).items():
             share = base64.b64decode(b64_share) if isinstance(b64_share, str) else bytes(b64_share)
             self.s_sk_shares_pool.setdefault(target_id, []).append(share)
+            logging.info(f"[Server] R3 <- Received s_sk share for target {target_id} from {client_id}: {share.hex()}")
 
         if len(self.r3_received) == len(self.surviving_clients) and not self.finalized:
             self.finalized = True
@@ -243,6 +254,9 @@ class SecureAggregationServer:
             shares     = self.b_u_shares_pool.get(survivor_id, [])
             b_u_seed   = combine_shares(shares[: self.t_threshold])
             b_u_vector = self.crypto.generate_self_mask(b_u_seed, mask_len)
+            
+            logging.info(f"[Server] R3 Recon -> b_u_seed for {survivor_id}: {b_u_seed.hex()}")
+            logging.info(f"[Server] R3 Recon -> b_u mask vector for {survivor_id} (first 5): {b_u_vector[:5]}...")
             masked_sum = [(v - m) % FIELD_MODULUS for v, m in zip(masked_sum, b_u_vector)]
 
         # Step 3 — Remove pairwise masks for dropped clients (if any)
@@ -253,6 +267,8 @@ class SecureAggregationServer:
                 shares      = self.s_sk_shares_pool.get(dropped_id, [])
                 s_sk_bytes  = combine_shares(shares[: self.t_threshold])
                 dropped_sSK = x25519.X25519PrivateKey.from_private_bytes(s_sk_bytes)
+                
+                logging.info(f"[Server] R3 Recon -> Recovered dropped private key s_SK for {dropped_id}: {s_sk_bytes.hex()}")
 
                 dropped_shared_seeds = {}
                 for survivor_id in self.surviving_clients:

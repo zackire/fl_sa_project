@@ -2,6 +2,7 @@ import json
 import logging
 import base64
 import time
+import pickle
 import numpy as np
 from crypto.interface import CryptoInterface
 
@@ -83,6 +84,9 @@ class SecureAggregationClient:
             "sPK": base64.b64encode(s_keys["sPK"]).decode("utf-8"),
         }
 
+        logging.info(f"[{self.client_id}] Generated cPK (base64): {pub_keys['cPK']}")
+        logging.info(f"[{self.client_id}] Generated sPK (base64): {pub_keys['sPK']}")
+
         payload = PayloadBuilder.build_round_0_payload(self.client_id, pub_keys)
         self._publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
         logging.info(f"[{self.client_id}] DH keypairs generated. Public keys sent to server.")
@@ -123,6 +127,10 @@ class SecureAggregationClient:
             f"threshold: {threshold}/{total_shares}"
         )
 
+        for uid, keys in self.public_keys.items():
+            logging.info(f"[{self.client_id}] Registry - {uid} cPK: {base64.b64encode(keys['cPK']).decode('utf-8')}")
+            logging.info(f"[{self.client_id}] Registry - {uid} sPK: {base64.b64encode(keys['sPK']).decode('utf-8')}")
+
         self.shared_secrets = self.crypto.compute_shared_secrets(self.public_keys)
         self.my_b_u_seed    = self.crypto.generate_self_mask_seed()
         shamir_shares       = self.crypto.generate_shamir_shares(threshold, total_shares)
@@ -135,7 +143,13 @@ class SecureAggregationClient:
             s_sk_share = shamir_shares["s_sk"][idx][1]
             c_uv_key   = self.shared_secrets[target_id]["c_uv"]
             ciphertext = self.crypto.encrypt_shares_for_routing(target_id, b_u_share, s_sk_share, c_uv_key)
-            encrypted_shares_payload[target_id] = base64.b64encode(ciphertext).decode("utf-8")
+            encrypted_b64 = base64.b64encode(ciphertext).decode("utf-8")
+            encrypted_shares_payload[target_id] = encrypted_b64
+
+            logging.info(f"[{self.client_id}] -> {target_id} | b_u_share: {b_u_share.hex()}")
+            logging.info(f"[{self.client_id}] -> {target_id} | s_sk_share: {s_sk_share.hex()}")
+            logging.info(f"[{self.client_id}] -> {target_id} | c_uv_key (derived): {c_uv_key.hex()}")
+            logging.info(f"[{self.client_id}] -> {target_id} | ciphertext (base64): {encrypted_b64}")
 
         payload = PayloadBuilder.build_round_1_payload(self.client_id, encrypted_shares_payload)
         self._publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
@@ -152,7 +166,19 @@ class SecureAggregationClient:
 
         ciphertext = base64.b64decode(b64_cipher)
         c_uv_key   = self.shared_secrets[source_id]["c_uv"]
-        self.crypto.decrypt_incoming_shares(source_id, ciphertext, c_uv_key)
+        
+        logging.info(f"[{self.client_id}] <- {source_id} | Received ciphertext (base64): {b64_cipher}")
+        logging.info(f"[{self.client_id}] <- {source_id} | c_uv_key (derived): {c_uv_key.hex()}")
+
+        plaintext = self.crypto.decrypt_incoming_shares(source_id, ciphertext, c_uv_key)
+        
+        try:
+            unpickled_shares = pickle.loads(plaintext)
+            logging.info(f"[{self.client_id}] <- {source_id} | Decrypted b_u_share: {unpickled_shares['b_u_share'].hex()}")
+            logging.info(f"[{self.client_id}] <- {source_id} | Decrypted s_sk_share: {unpickled_shares['s_sk_share'].hex()}")
+        except Exception as e:
+            logging.error(f"[{self.client_id}] Failed to unpickle decrypted payload from {source_id}: {e}")
+
         self.received_shares_from.add(source_id)
 
         logging.info(
@@ -209,6 +235,9 @@ class SecureAggregationClient:
 
         y_u = self.crypto.compute_masked_input(flat_weights, b_u_vector, pairwise_masks, self.active_users)
 
+        logging.info(f"[{self.client_id}] Computed 'b_u' self-mask vector elements (first 5): {b_u_vector[:5]}...")
+        logging.info(f"[{self.client_id}] Generated masked input Y_u (first 5 elements): {y_u[:5]}...")
+
         logging.info(f"[{self.client_id}] Masks applied. Sending masked weights to server.")
 
         payload = PayloadBuilder.build_round_2_payload(self.client_id, y_u, mask_length)
@@ -238,6 +267,11 @@ class SecureAggregationClient:
             "b_u_shares":  {cid: base64.b64encode(s).decode("utf-8") for cid, s in b_u_shares.items()},
             "s_sk_shares": {cid: base64.b64encode(s).decode("utf-8") for cid, s in s_sk_shares.items()},
         }
+
+        for cid, share_bytes in b_u_shares.items():
+            logging.info(f"[{self.client_id}] R3 -> Unlocked b_u share for {cid}: {share_bytes.hex()}")
+        for cid, share_bytes in s_sk_shares.items():
+            logging.info(f"[{self.client_id}] R3 -> Unlocked s_sk share for {cid}: {share_bytes.hex()}")
 
         payload = PayloadBuilder.build_round_3_payload(self.client_id, recovery_payload)
         self._publish(PayloadBuilder.get_server_dropbox_topic(self.client_id), payload)
