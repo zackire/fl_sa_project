@@ -2,21 +2,33 @@
 metrics_collector.py
 ────────────────────────────────────────────────────────────────────────────
 Measures per-round performance for the FL Secure Aggregation testbed.
+Each node (server or client) runs its own collector independently on its
+own Raspberry Pi, measuring only that node's process resources.
 
 Tracked metrics (per round):
-  • Latency   — wall-clock time from round-start to global-model-ready (s)
-  • CPU       — average CPU usage sampled throughout the round (%)
-  • RAM       — average RSS memory usage sampled throughout the round (MB)
-  • Bandwidth — total bytes published over MQTT during the round (bytes)
+  • Latency      — wall-clock time for the full SA protocol (R0→R3) on
+                   this node, from the ignition signal to the last message
+                   sent/received in Round 3 (seconds)
+  • CPU          — average CPU usage of this process, sampled throughout
+                   the round at 0.5 s intervals (%)
+  • RAM          — average RSS memory of this process, sampled at the
+                   same interval (MB)
+  • Bandwidth TX — total bytes this node *published* over MQTT (bytes)
+  • Bandwidth RX — total bytes this node *received* over MQTT (bytes)
+  • Bandwidth    — TX + RX combined (bytes)
 
-Output: CSV at  <output_dir>/metrics_<mode>_<timestamp>.csv
-        One row per completed round. Appended live — safe if process is killed.
+CSV filename format:
+  <protocol>_<stack>_<role>_<node_id>_<YYYYMMDD_HHMMSS>.csv
+  Examples:
+    secagg_stackA_server_server_20260426_115300.csv
+    secagg_stackA_client_client1_20260426_115300.csv
+    baseline_server_server_20260426_115300.csv
 
 Docker note:
   Mount the output directory as a volume so the CSV is visible on the host:
       volumes:
         - ./metrics/results:/app/metrics/results
-  Then pass --results-dir /app/metrics/results to main_server.py.
+  Then pass --results-dir /app/metrics/results to main_server.py / main_client.py.
 
 psutil + Docker note:
   cpu_percent(interval=None) always returns 0.0 on the first call inside a
@@ -24,17 +36,11 @@ psutil + Docker note:
   the process handle at __init__ time and uses blocking cpu_percent(interval=N)
   calls in the sampling thread so every sample is accurate.
 
-Usage (in main_server.py):
-────────────────────────────────────────────────────────────────────────────
-    from metrics.metrics_collector import MetricsCollector
-
-    collector = MetricsCollector(mode="stack_a", output_dir="/app/metrics/results")
-    orchestrator = SecureAggregationServer(..., metrics=collector)
-────────────────────────────────────────────────────────────────────────────
 Hooks inside each orchestrator:
-    self.metrics.round_start(round_number)    # at ignition / global-model broadcast
-    self.metrics.record_bytes(len(payload))   # inside _publish() wrapper
-    self.metrics.round_end(round_number)      # after current_global_weights is set
+    self.metrics.round_start(round_number)         # R0 ignition (client) / first pubkey (server)
+    self.metrics.record_bytes(len(payload))        # every mqtt.publish() call
+    self.metrics.record_recv_bytes(len(payload))   # every mqtt message received
+    self.metrics.round_end(round_number)           # after last R3 action
 """
 
 import csv
@@ -67,33 +73,38 @@ _CPU_SAMPLE_INTERVAL_S = 0.5
 
 @dataclass
 class RoundMetrics:
-    mode:            str
+    node_label:      str   # e.g. "secagg_stackA_server" or "secagg_stackA_client1"
     round_num:       int
     timestamp:       str   = ""
     latency_s:       float = 0.0
     cpu_avg_pct:     float = 0.0
     ram_avg_mb:      float = 0.0
-    bandwidth_bytes: int   = 0
+    bw_tx_bytes:     int   = 0   # bytes this node sent (published)
+    bw_rx_bytes:     int   = 0   # bytes this node received
+    bw_total_bytes:  int   = 0   # tx + rx
 
     # Internal — not written to CSV
-    _start_time:  float      = field(default=0.0,            repr=False)
-    _cpu_samples: List[float] = field(default_factory=list,  repr=False)
-    _ram_samples: List[float] = field(default_factory=list,  repr=False)
+    _start_time:  float      = field(default=0.0,           repr=False)
+    _cpu_samples: List[float] = field(default_factory=list, repr=False)
+    _ram_samples: List[float] = field(default_factory=list, repr=False)
 
     CSV_FIELDS = [
-        "mode", "round_num", "timestamp",
-        "latency_s", "cpu_avg_pct", "ram_avg_mb", "bandwidth_bytes",
+        "node_label", "round_num", "timestamp",
+        "latency_s", "cpu_avg_pct", "ram_avg_mb",
+        "bw_tx_bytes", "bw_rx_bytes", "bw_total_bytes",
     ]
 
     def to_row(self) -> Dict:
         return {
-            "mode":             self.mode,
-            "round_num":        self.round_num,
-            "timestamp":        self.timestamp,
-            "latency_s":        round(self.latency_s, 4),
-            "cpu_avg_pct":      round(self.cpu_avg_pct, 2),
-            "ram_avg_mb":       round(self.ram_avg_mb, 2),
-            "bandwidth_bytes":  self.bandwidth_bytes,
+            "node_label":     self.node_label,
+            "round_num":      self.round_num,
+            "timestamp":      self.timestamp,
+            "latency_s":      round(self.latency_s, 4),
+            "cpu_avg_pct":    round(self.cpu_avg_pct, 2),
+            "ram_avg_mb":     round(self.ram_avg_mb, 2),
+            "bw_tx_bytes":    self.bw_tx_bytes,
+            "bw_rx_bytes":    self.bw_rx_bytes,
+            "bw_total_bytes": self.bw_tx_bytes + self.bw_rx_bytes,
         }
 
 
@@ -103,21 +114,47 @@ class RoundMetrics:
 
 class MetricsCollector:
     """
+    One collector per process (one per Raspberry Pi node).
+
     Lifecycle per round:
         round_start(n)
-            → record_bytes(b)  [called once per mqtt.publish()]
+            → record_bytes(b)       [every mqtt.publish()]
+            → record_recv_bytes(b)  [every MQTT message received]
         round_end(n)
             → row appended to CSV immediately
     """
 
-    def __init__(self, mode: str, output_dir: str = "/app/metrics/results"):
+    def __init__(self,
+                 protocol: str,
+                 stack: str,
+                 role: str,
+                 node_id: str,
+                 output_dir: str = "/app/metrics/results"):
         """
         Args:
-            mode:       Run label — "baseline", "stack_a", "stack_b", "stack_c"
+            protocol:   "secagg" or "baseline"
+            stack:      "stackA", "stackB", "stackC", or "" for baseline
+            role:       "server" or "client"
+            node_id:    unique node name, e.g. "server", "client1", "client2"
             output_dir: Directory for the CSV. Mount this as a Docker volume.
+
+        CSV filename produced:
+            <protocol>_<stack>_<role>_<node_id>_<YYYYMMDD_HHMMSS>.csv
+            e.g.  secagg_stackA_server_server_20260426_115300.csv
+                  secagg_stackA_client_client1_20260426_115300.csv
+                  baseline_server_server_20260426_115300.csv
         """
-        self.mode       = mode
+        self.protocol   = protocol
+        self.stack      = stack
+        self.role       = role
+        self.node_id    = node_id
         self.output_dir = output_dir
+
+        # Human-readable label stored in every CSV row
+        if stack:
+            self.node_label = f"{protocol}_{stack}_{role}_{node_id}"
+        else:
+            self.node_label = f"{protocol}_{role}_{node_id}"
 
         # Prime psutil process handle and take a throwaway cpu_percent reading
         # so subsequent blocking calls return real values from the first sample.
@@ -135,15 +172,15 @@ class MetricsCollector:
         # Completed rounds (kept in memory for print_summary)
         self._completed: List[RoundMetrics] = []
 
-        # CSV path — fixed at construction so all rounds go to the same file
+        # CSV filename: <protocol>_<stack>_<role>_<node_id>_<timestamp>.csv
         os.makedirs(output_dir, exist_ok=True)
-        safe_mode      = mode.replace(" ", "_").lower()
-        ts             = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self._csv_path = os.path.join(output_dir, f"metrics_{safe_mode}_{ts}.csv")
+        parts = [p for p in [protocol, stack, role, node_id] if p]
+        ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._csv_path = os.path.join(output_dir, f"{'_'.join(parts)}_{ts}.csv")
 
         self._init_csv()
         logging.info(
-            f"[Metrics] Collector initialised  |  mode={mode}  |  "
+            f"[Metrics] Collector ready  |  node={self.node_label}  |  "
             f"output={self._csv_path}"
         )
 
@@ -152,7 +189,7 @@ class MetricsCollector:
     # ──────────────────────────────────────────── #
 
     def round_start(self, round_num: int):
-        """Call at the moment the server sends the round's trigger message."""
+        """Call at the moment the round begins on this node."""
         if self._active is not None:
             logging.warning(
                 f"[Metrics] round_start({round_num}) called while round "
@@ -161,7 +198,7 @@ class MetricsCollector:
             self._finalise_active(forced=True)
 
         self._active = RoundMetrics(
-            mode=self.mode,
+            node_label=self.node_label,
             round_num=round_num,
             timestamp=datetime.now().isoformat(timespec="seconds"),
             _start_time=time.perf_counter(),
@@ -175,9 +212,14 @@ class MetricsCollector:
             self._sampling_thread.start()
 
     def record_bytes(self, num_bytes: int):
-        """Call once per mqtt.publish() with len(payload.encode('utf-8'))."""
+        """Call once per mqtt.publish() — counts bytes this node sent (TX)."""
         if self._active is not None:
-            self._active.bandwidth_bytes += num_bytes
+            self._active.bw_tx_bytes += num_bytes
+
+    def record_recv_bytes(self, num_bytes: int):
+        """Call once per MQTT message received — counts bytes this node received (RX)."""
+        if self._active is not None:
+            self._active.bw_rx_bytes += num_bytes
 
     def round_end(self, round_num: int):
         """Call once the global model has been computed for this round."""
@@ -209,6 +251,9 @@ class MetricsCollector:
             m.cpu_avg_pct = sum(m._cpu_samples) / len(m._cpu_samples)
         if m._ram_samples:
             m.ram_avg_mb = sum(m._ram_samples) / len(m._ram_samples)
+
+        # Compute combined bandwidth
+        m.bw_total_bytes = m.bw_tx_bytes + m.bw_rx_bytes
 
         self._completed.append(m)
         self._write_row(m)   # append to CSV immediately
@@ -254,16 +299,17 @@ class MetricsCollector:
     # ──────────────────────────────────────────── #
 
     def print_summary(self):
-        """Logs a compact summary table. Call on KeyboardInterrupt in main_server.py."""
+        """Logs a compact summary table. Call on KeyboardInterrupt in main_server.py/main_client.py."""
         if not self._completed:
             return
 
         header = (
             f"{'Round':>6}  {'Latency(s)':>10}  "
-            f"{'CPU(%)':>7}  {'RAM(MB)':>8}  {'BW(bytes)':>12}"
+            f"{'CPU(%)':>7}  {'RAM(MB)':>8}  "
+            f"{'TX(bytes)':>12}  {'RX(bytes)':>12}  {'Total BW':>12}"
         )
         bar = "─" * len(header)
-        logging.info(f"\n[Metrics] ── Summary  mode={self.mode} ──")
+        logging.info(f"\n[Metrics] ── Summary  node={self.node_label} ──")
         logging.info(bar)
         logging.info(header)
         logging.info(bar)
@@ -271,7 +317,8 @@ class MetricsCollector:
             logging.info(
                 f"{m.round_num:>6}  {m.latency_s:>10.3f}  "
                 f"{m.cpu_avg_pct:>7.1f}  {m.ram_avg_mb:>8.1f}  "
-                f"{m.bandwidth_bytes:>12,}"
+                f"{m.bw_tx_bytes:>12,}  {m.bw_rx_bytes:>12,}  "
+                f"{m.bw_tx_bytes + m.bw_rx_bytes:>12,}"
             )
         logging.info(bar)
         logging.info(f"[Metrics] CSV saved → {self._csv_path}")

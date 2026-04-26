@@ -33,11 +33,21 @@ def main():
 
     # ── Determine metric label ──────────────────────────────────────────────
     if mode == "baseline":
-        metric_mode = "baseline"
+        collector = MetricsCollector(
+            protocol="baseline",
+            stack="",
+            role="server",
+            node_id="server",
+            output_dir=args.results_dir,
+        )
     else:
-        metric_mode = f"stack_{args.stack.lower()}"
-
-    collector = MetricsCollector(mode=metric_mode, output_dir=args.results_dir)
+        collector = MetricsCollector(
+            protocol="secagg",
+            stack=f"stack{args.stack.upper()}",
+            role="server",
+            node_id="server",
+            output_dir=args.results_dir,
+        )
 
     # ── MQTT handler ────────────────────────────────────────────────────────
     mqtt_handler = MQTTServerHandler(

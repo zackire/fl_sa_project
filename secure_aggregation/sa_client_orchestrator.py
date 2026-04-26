@@ -39,6 +39,10 @@ class SecureAggregationClient:
         data     = json_payload.get("data", {})
         msg_type = meta.get("msg_type")
 
+        # Count every inbound MQTT byte toward this node's RX bandwidth
+        if self.metrics:
+            self.metrics.record_recv_bytes(len(payload.encode("utf-8")))
+
         try:
             if msg_type == "ignition":
                 self._execute_round_0(data)

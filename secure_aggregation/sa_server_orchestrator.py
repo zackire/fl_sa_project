@@ -63,6 +63,10 @@ class SecureAggregationServer:
         meta = full_payload.get("meta", {})
         data = full_payload.get("data", {})
 
+        # Count every inbound MQTT byte toward this node's RX bandwidth
+        if self.metrics:
+            self.metrics.record_recv_bytes(len(payload.encode("utf-8")))
+
         try:
             client_id = meta.get("client_id", topic.split("/")[-2])
             round_num = meta.get("round")
