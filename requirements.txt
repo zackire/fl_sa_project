@@ -1,11 +1,16 @@
-# Networking & Orchestration
-paho-mqtt==1.6.1
-numpy>=1.21.0
+# Networking & Machine Learning Math
+paho-mqtt>=2.1.0
+numpy>=1.24.0
 
-# Stack A: Base Cryptography & AEAD
+# Protocol & ML Core Utilities
+scikit-learn>=1.0.0
+
+# Core Cryptography & SSS (Stacks & Utils)
 cryptography>=41.0.0
-ascon==0.0.9
+pycryptodome>=3.23.0
 
-# Stack B & C: Lightweight PRG Ciphers
-simonspeckciphers>=0.4.0
-present-cipher>=1.0.0
+# Lightweight PRG Block Ciphers (Mask Expansion)
+simonspeckciphers>=1.0.0
+
+# Metrics — CPU / RAM sampling (metrics/metrics_collector.py)
+psutil>=5.9.0

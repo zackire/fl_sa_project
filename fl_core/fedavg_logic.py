@@ -1,43 +1,22 @@
-from functools import reduce
-from typing import List, Tuple
-
+from typing import List
 import numpy as np
+import logging
 
-def local_fit(model, global_weights, X_train, y_train):
-    """Execution stub for orchestrator."""
-    if len(global_weights) > 0:
-        model.set_weights(global_weights)
-    
-    # Assuming standard scikit-learn or similar fit mechanics
-    model.fit(X_train, y_train)
-    return model.get_weights(), len(X_train)
 
-def aggregate(results: List[Tuple[List[np.ndarray], int]]) -> List[np.ndarray]:
-    """Compute weighted average of model parameters.
-    
-    Args:
-        results: A list of tuples, where each tuple contains a list of
-                 NumPy arrays representing the model parameters (weights),
-                 and an integer representing the number of examples.
-                 
-    Returns:
-        A list of NumPy arrays representing the aggregated parameters.
+def aggregate(summed_weights: List[np.ndarray], num_survivors: int) -> List[np.ndarray]:
     """
-    if not results:
+    Compute the average of the securely aggregated model parameters.
+    Since the Crypto Stack outputs a strict mathematical sum of all weights, 
+    we find the average by dividing by the active participant count.
+    """
+    if not summed_weights or num_survivors <= 0:
         return []
         
-    # Calculate the total number of examples used during training
-    num_examples_total = sum(num_examples for (_, num_examples) in results)
-
-    # Create a list of weights, each multiplied by the related number of examples
-    weighted_weights = [
-        [layer * num_examples for layer in weights] for weights, num_examples in results
-    ]
-
-    # Compute average weights of each layer
-    weights_prime: List[np.ndarray] = [
-        reduce(np.add, layer_updates) / num_examples_total
-        for layer_updates in zip(*weighted_weights)
+    logging.info(f"Computing FedAvg over {num_survivors} cryptographically summed client weights.")
+    
+    # Divide the unmasked numpy array sum by the number of clients
+    averaged_weights = [
+        layer_sum / num_survivors for layer_sum in summed_weights
     ]
     
-    return weights_prime
+    return averaged_weights

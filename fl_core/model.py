@@ -1,94 +1,84 @@
 import numpy as np
-from sklearn.linear_model import SGDClassifier
-
-class AnomalyDetectionLR:
-    """Logistic Regression model optimized for anomaly detection on edge nodes."""
-    
-    def __init__(self):
-        # We use log_loss to maintain a probabilistic classifier natively.
-        self.model = SGDClassifier(
-            loss="log_loss",
-            penalty="l2",
-            max_iter=1,  # In FL, we typically run 1 epoch per round over the data, handled organically
-            warm_start=True,
-            random_state=42
-        )
-        self.is_initialized = False
-
-    def get_weights(self) -> list[np.ndarray]:
-        """Retrieve the current weights and intercept from the model."""
-        if not self.is_initialized:
-            # Provide dummy weights if model hasn't been fit yet
-            # In a real use case, input feature size needs to be known/initialized
-            return []
-            
-        return [self.model.coef_, self.model.intercept_]
-
-    def set_weights(self, weights: list[np.ndarray]):
-        """Set the weights and intercept into the model."""
-        if not weights:
-            return
-            
-        self.model.coef_ = weights[0]
-        self.model.intercept_ = weights[1]
-        
-        # If classes are not initialized yet
-        if not self.is_initialized:
-            self.model.classes_ = np.array([0, 1])  # Binary classification assumed
-            self.is_initialized = True
-
-    def fit(self, X: np.ndarray, y: np.ndarray, epochs: int = 1):
-        """Train the model locally."""
-        if not self.is_initialized:
-            self.model.classes_ = np.array([0, 1])
-            self.is_initialized = True
-            
-        for _ in range(epochs):
-            self.model.partial_fit(X, y, classes=np.array([0, 1]))
-
-    def evaluate(self, X: np.ndarray, y: np.ndarray) -> float:
-        """Evaluate the model on a test set and return accuracy."""
-        if not self.is_initialized:
-            return 0.0
-        return self.model.score(X, y)
-import numpy as np
 import logging
+from typing import List
 
-class AnomalyDetectionLR:
+
+# ---------------------------------------------------------------------------
+# Fixed weight registry — one explicit array per client.
+# These never change. What you see here is exactly what the server receives.
+# coef      : shape (10,)  — one weight per feature
+# intercept : shape (1,)
+# ---------------------------------------------------------------------------
+CLIENT_WEIGHTS = {
+    "client1": {
+        "coef":      np.array([ 0.10,  0.20,  0.30,  0.40,  0.50,  0.60,  0.70,  0.80,  0.90,  1.00]),
+        "intercept": np.array([ 0.05]),
+    },
+    "client2": {
+        "coef":      np.array([-0.10,  0.00,  0.10,  0.20,  0.30,  0.40,  0.50,  0.60,  0.70,  0.80]),
+        "intercept": np.array([ 0.00]),
+    },
+    "client3": {
+        "coef":      np.array([-0.50, -0.40, -0.30, -0.20, -0.10,  0.00,  0.10,  0.20,  0.30,  0.40]),
+        "intercept": np.array([-0.05]),
+    },
+}
+
+# Expected FedAvg result (manual verification):
+#   coef      = [-0.1667, -0.0667,  0.0333,  0.1333,  0.2333,
+#                 0.3333,  0.4333,  0.5333,  0.6333,  0.7333]
+#   intercept = 0.0000
+
+
+class MockSecAggModel:
     """
-    A mock Logistic Regression model to test the Secure Aggregation network pipes.
-    Generates random weight arrays instead of doing actual ML training.
+    Mock Logistic Regression model for Federated Learning experiments.
+
+    Weight layout (mirrors sklearn LogisticRegression):
+        weights[0]  ->  coef       shape: (num_features,)  i.e. (10,)
+        weights[1]  ->  intercept  shape: (1,)
+
+    Weights are hardcoded per client_id. No randomness, no linspace,
+    no fit() transformation — what is initialised is exactly what gets sent.
     """
-    def __init__(self, num_features: int = 10):
-        self.num_features = num_features
-        # Simulate weights (array of features) and bias (array of 1)
-        self.weights = [
-            np.random.uniform(-0.5, 0.5, self.num_features),
-            np.random.uniform(-0.5, 0.5, 1)
-        ]
 
-    def set_weights(self, global_weights: list):
-        """Receives the new global model from the server."""
-        if global_weights and len(global_weights) > 0:
-            self.weights = global_weights
-            logging.info("Model weights updated with new global weights.")
+    def __init__(self, client_id: str = "client1", num_features: int = 10):
+        self.client_id = client_id
 
-    def get_weights(self) -> list:
-        """Returns the current weights for masking and transmission."""
+        if client_id not in CLIENT_WEIGHTS:
+            raise ValueError(
+                f"Unknown client_id '{client_id}'. "
+                f"Expected one of: {list(CLIENT_WEIGHTS.keys())}"
+            )
+
+        profile   = CLIENT_WEIGHTS[client_id]
+        coef      = profile["coef"].copy()
+        intercept = profile["intercept"].copy()
+
+        self.weights: List[np.ndarray] = [coef, intercept]
+
+        logging.info(f"[{self.client_id}] Model initialised (NO fit() applied)")
+        logging.info(f"[{self.client_id}]   coef      shape={coef.shape} | values={coef}")
+        logging.info(f"[{self.client_id}]   intercept shape={intercept.shape} | values={intercept}")
+
+    def get_weights(self) -> List[np.ndarray]:
         return self.weights
 
-    def fit(self, X_train, y_train):
+    def set_weights(self, global_weights: List[np.ndarray]):
+        """Replace local weights with the received global averages."""
+        if global_weights and len(global_weights) > 0:
+            self.weights = [w.copy() for w in global_weights]
+            logging.info(f"[{self.client_id}] Weights updated from global model:")
+            logging.info(f"[{self.client_id}]   coef      = {np.round(self.weights[0], 6)}")
+            logging.info(f"[{self.client_id}]   intercept = {np.round(self.weights[1], 6)}")
+
+    def fit(self):
         """
-        MOCK TRAINING: Simulates learning by shifting the weights slightly 
-        using random Gaussian noise.
+        NOT USED in the vanilla baseline.
+        No-op placeholder — keeps the interface compatible with future
+        SecAgg experiments that will add real local training.
         """
-        logging.info("Simulating local training on mock data...")
-        
-        noise_w = np.random.normal(0, 0.05, self.num_features)
-        noise_b = np.random.normal(0, 0.05, 1)
-        
-        self.weights = [
-            self.weights[0] + noise_w,
-            self.weights[1] + noise_b
-        ]
-        logging.info("Mock training complete. Delta weights generated.")
+        logging.info(
+            f"[{self.client_id}] fit() called — no-op in vanilla baseline. "
+            "Weights unchanged."
+        )

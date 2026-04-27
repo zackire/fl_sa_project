@@ -1,1 +1,44 @@
-./logs
+# ── IDE / Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS junk ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+.tox/
+venv/
+.venv/
+env/
+
+# ── Metrics results (CSVs) ────────────────────────────────────────────────────
+metrics/results/
+metrics/logs/
+
+# ── Log files ─────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Certificates / secrets (generated locally) ───────────────────────────────
+certs/
+*.key
+*.crt
+*.pem
+*.p12
+
+# ── Docker env overrides ──────────────────────────────────────────────────────
+.env
+.env.*

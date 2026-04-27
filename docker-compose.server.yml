@@ -1,0 +1,34 @@
+version: '3.8'
+services:
+  mqtt-broker:
+    image: eclipse-mosquitto:latest
+    container_name: fl_mosquitto_broker
+    ports:
+      - "8883:8883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./certs/server:/mosquitto/config/certs:ro
+    networks:
+      - fl_shared_bridge
+
+  fl-server:
+    build: .
+    container_name: fl_server
+    depends_on:
+      - mqtt-broker
+    environment:
+      - EXPECTED_K=${EXPECTED_K:-3}
+      - THRESHOLD_T=${THRESHOLD_T:-2}
+      - CRYPTO_STACK=${CRYPTO_STACK:-A}
+      - PROTOCOL_MODE=${PROTOCOL_MODE:-secagg}
+    volumes:
+      - ./certs/clients/fl_server:/app/certs:ro
+      - ./:/app
+      - ./metrics/results:/app/metrics/results
+    command: ["sh", "-c", "python main_server.py --ip mqtt-broker --k $${EXPECTED_K} --t $${THRESHOLD_T} --stack $${CRYPTO_STACK} --ca /app/certs/ca.crt --cert /app/certs/client.crt --key /app/certs/client.key --results-dir /app/metrics/results"]
+    networks:
+      - fl_shared_bridge
+
+networks:
+  fl_shared_bridge:
+    external: true
