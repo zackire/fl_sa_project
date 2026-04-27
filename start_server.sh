@@ -54,7 +54,7 @@ docker network inspect fl_shared_bridge >/dev/null 2>&1 || docker network create
 
 echo "🚀 Starting Mosquitto Broker and Aggregator Server..."
 
-EXPECTED_K=$input_k \
+sudo EXPECTED_K=$input_k \
 THRESHOLD_T=$input_t \
 CRYPTO_STACK=$input_stack \
 PROTOCOL_MODE=$PROTOCOL_MODE \

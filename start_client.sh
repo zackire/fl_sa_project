@@ -51,7 +51,7 @@ fi
 echo ""
 echo "🚀 Starting Client container '$input_client_id' connecting to '$input_server_ip'..."
 
-CLIENT_ID=$input_client_id \
+sudo CLIENT_ID=$input_client_id \
 SERVER_IP=$input_server_ip \
 CRYPTO_STACK=$input_stack \
 PROTOCOL_MODE=$PROTOCOL_MODE \
