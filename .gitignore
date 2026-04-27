@@ -26,6 +26,7 @@ env/
 
 # ── Metrics results (CSVs) ────────────────────────────────────────────────────
 metrics/results/
+metrics/results/*.csv
 metrics/logs/
 
 # ── Log files ─────────────────────────────────────────────────────────────────
