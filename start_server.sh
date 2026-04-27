@@ -58,6 +58,6 @@ sudo EXPECTED_K=$input_k \
 THRESHOLD_T=$input_t \
 CRYPTO_STACK=$input_stack \
 PROTOCOL_MODE=$PROTOCOL_MODE \
-docker-compose -f docker-compose.server.yml up -d --build
+docker compose -f docker-compose.server.yml up -d --build
 
 echo "Done! Run 'docker logs -f fl_server' to watch the server orchestrate the training round."

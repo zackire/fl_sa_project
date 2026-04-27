@@ -55,6 +55,6 @@ sudo CLIENT_ID=$input_client_id \
 SERVER_IP=$input_server_ip \
 CRYPTO_STACK=$input_stack \
 PROTOCOL_MODE=$PROTOCOL_MODE \
-docker-compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build
+docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build
 
 echo "Done! Run 'docker logs -f fl_$input_client_id' to watch the network traffic."
