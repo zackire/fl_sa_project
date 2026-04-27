@@ -2,8 +2,6 @@ import json
 import logging
 import numpy as np
 
-# Reusing your existing communication utilities
-from communication.payload_builder import PayloadBuilder
 
 class VanillaFLClient:
     def __init__(self, client_id: str, mqtt_handler, local_model):
@@ -11,65 +9,71 @@ class VanillaFLClient:
         self.mqtt = mqtt_handler
         self.model = local_model
 
+        self._check_in_with_server()
+
+    # ---------------------------------------------------------------------- #
+    #  MQTT interface                                                         #
+    # ---------------------------------------------------------------------- #
+
+    def _check_in_with_server(self):
+        logging.info(f"[{self.client_id}] Checking in with server...")
+        payload = json.dumps({
+            "meta": {"client_id": self.client_id, "msg_type": "checkin"}
+        })
+        self.mqtt.publish(f"fl/client/{self.client_id}/to_server", payload)
+
     def process_mqtt_message(self, topic: str, payload: str):
         full_payload = json.loads(payload)
         meta = full_payload.get("meta", {})
         data = full_payload.get("data", {})
-        
         msg_type = meta.get("msg_type")
-        
-        # In Vanilla FL, the client only acts when the server sends the global model (or an ignition signal)
+
         if msg_type == "global_model":
             self._handle_global_model(data)
         elif msg_type == "ignition":
-            self._simulate_training_and_send()
+            round_num = meta.get("round", 1)
+            logging.info(f"[{self.client_id}] Ignition received — starting Round {round_num}.")
+            self._send_weights()
+
+    # ---------------------------------------------------------------------- #
+    #  Handlers                                                               #
+    # ---------------------------------------------------------------------- #
 
     def _handle_global_model(self, data: dict):
         global_weights_list = data.get("global_weights", [])
-        
-        if global_weights_list:
-            logging.info(f"[{self.client_id}] Received global model. Updating local weights...")
-            # Convert standard lists back to NumPy arrays for your model
-            global_weights = [np.array(w) for w in global_weights_list]
-            self.model.set_weights(global_weights)
-        else:
-            logging.info(f"[{self.client_id}] Received empty global model. Starting fresh...")
-            
-        self._simulate_training_and_send()
-        
-    def _simulate_training_and_send(self):
-        logging.info(f"[{self.client_id}] Simulating local training epoch...")
-        
-        # 1. Train the model (hooks right into your existing mock Logistic Regression)
-        self.model.fit()
-        
-        # 2. Extract the newly trained weights
-        updated_weights = self.model.get_weights()
-        
-        # 3. Dispatch the raw weights to the server
-        self._send_raw_weights(updated_weights)
-        
-    def _send_raw_weights(self, weights: list):
-        # Calculate raw mathematical weight values to log
-        total_weight_sum = sum(np.sum(w) for w in weights)
-        l2_norm_sum = sum(np.linalg.norm(w) for w in weights)
-        logging.info(f"[{self.client_id}] Math Summary -> Total Weight Sum: {total_weight_sum:.6f} | Combined L2 Norm: {l2_norm_sum:.6f}")
 
-        # Convert NumPy arrays to lists so they can be securely JSON formatted
+        if global_weights_list:
+            global_weights = [np.array(w) for w in global_weights_list]
+            logging.info(f"[{self.client_id}] Global model received from server.")
+            _log_weights(self.client_id, global_weights, label="Global model")
+            self.model.set_weights(global_weights)
+
+        self._send_weights()
+
+    # ---------------------------------------------------------------------- #
+    #  Sending                                                                #
+    # ---------------------------------------------------------------------- #
+
+    def _send_weights(self):
+        weights = self.model.get_weights()
+        _log_weights(self.client_id, weights, label="Sending weights to server")
+
         weights_list = [w.tolist() for w in weights]
-        
         payload = json.dumps({
-            "meta": {
-                "client_id": self.client_id,
-                "msg_type": "raw_weights"
-            },
-            "data": {
-                "weights": weights_list
-            }
+            "meta": {"client_id": self.client_id, "msg_type": "raw_weights"},
+            "data": {"weights": weights_list}
         })
-        
-        # You can use PayloadBuilder here if you have a specific uplink topic method, 
-        # otherwise we manually construct the topic it sends back to the server:
-        topic = f"fl/client/{self.client_id}/to_server" 
-        self.mqtt.publish(topic, payload)
-        logging.info(f"[{self.client_id}] Raw weights dispatched to server.")
+        self.mqtt.publish(f"fl/client/{self.client_id}/to_server", payload)
+        logging.info(f"[{self.client_id}] Weights published to server ✓")
+
+
+# ---------------------------------------------------------------------- #
+#  Shared logging helper                                                  #
+# ---------------------------------------------------------------------- #
+
+def _log_weights(client_id: str, weights: list, label: str = "Weights"):
+    component_labels = ["coef", "intercept"]
+    logging.info(f"[{client_id}] {label}:")
+    for i, w in enumerate(weights):
+        lbl = component_labels[i] if i < len(component_labels) else f"component_{i}"
+        logging.info(f"  [{lbl}]  {np.round(w, 6)}")

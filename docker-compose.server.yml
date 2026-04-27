@@ -23,7 +23,9 @@ services:
       - PROTOCOL_MODE=${PROTOCOL_MODE:-secagg}
     volumes:
       - ./certs/clients/fl_server:/app/certs:ro
-    command: ["sh", "-c", "python main_server.py --ip mqtt-broker --k $${EXPECTED_K} --t $${THRESHOLD_T} --stack $${CRYPTO_STACK} --ca /app/certs/ca.crt --cert /app/certs/client.crt --key /app/certs/client.key"]
+      - ./:/app
+      - ./metrics/results:/app/metrics/results
+    command: ["sh", "-c", "python main_server.py --ip mqtt-broker --k $${EXPECTED_K} --t $${THRESHOLD_T} --stack $${CRYPTO_STACK} --ca /app/certs/ca.crt --cert /app/certs/client.crt --key /app/certs/client.key --results-dir /app/metrics/results"]
     networks:
       - fl_shared_bridge
 
