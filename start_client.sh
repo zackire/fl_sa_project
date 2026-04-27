@@ -67,9 +67,15 @@ if command -v docker >/dev/null 2>&1 && ! groups | grep -q "\bdocker\b"; then
 fi
 
 if docker info >/dev/null 2>&1; then
+    echo "🌐 Ensuring Docker network 'fl_shared_bridge' exists natively..."
+    docker network inspect fl_shared_bridge >/dev/null 2>&1 || docker network create fl_shared_bridge
+
     echo "🐳 Running Docker Compose natively..."
     docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build
 else
+    echo "🌐 Ensuring Docker network 'fl_shared_bridge' exists via sudo..."
+    sudo docker network inspect fl_shared_bridge >/dev/null 2>&1 || sudo docker network create fl_shared_bridge
+
     echo "🐳 Sudo required for Docker. Escalating privileges..."
     sudo -E docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build
 fi
