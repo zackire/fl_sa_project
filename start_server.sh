@@ -54,10 +54,27 @@ docker network inspect fl_shared_bridge >/dev/null 2>&1 || docker network create
 
 echo "🚀 Starting Mosquitto Broker and Aggregator Server..."
 
-sudo EXPECTED_K=$input_k \
-THRESHOLD_T=$input_t \
-CRYPTO_STACK=$input_stack \
-PROTOCOL_MODE=$PROTOCOL_MODE \
-docker compose -f docker-compose.server.yml up -d --build
+# Export variables for Docker Compose
+export EXPECTED_K=$input_k
+export THRESHOLD_T=$input_t
+export CRYPTO_STACK=$input_stack
+export PROTOCOL_MODE=$PROTOCOL_MODE
+
+echo "🔓 Pre-emptively granting Docker read-access to SSL certificates..."
+sudo chmod -R a+rx certs/
+
+# Optional Quality of Life: Add user to Docker group if not already present
+if command -v docker >/dev/null 2>&1 && ! groups | grep -q "\bdocker\b"; then
+    echo "🔧 First time setup: Adding $USER to the 'docker' group for future convenience..."
+    sudo usermod -aG docker $USER || true
+fi
+
+if docker info >/dev/null 2>&1; then
+    echo "🐳 Running Docker Compose natively..."
+    docker compose -f docker-compose.server.yml up -d --build
+else
+    echo "🐳 Sudo required for Docker. Escalating privileges..."
+    sudo -E docker compose -f docker-compose.server.yml up -d --build
+fi
 
 echo "Done! Run 'docker logs -f fl_server' to watch the server orchestrate the training round."

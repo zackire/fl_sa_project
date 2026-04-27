@@ -51,10 +51,27 @@ fi
 echo ""
 echo "🚀 Starting Client container '$input_client_id' connecting to '$input_server_ip'..."
 
-sudo CLIENT_ID=$input_client_id \
-SERVER_IP=$input_server_ip \
-CRYPTO_STACK=$input_stack \
-PROTOCOL_MODE=$PROTOCOL_MODE \
-docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build
+# Export variables for Docker Compose
+export CLIENT_ID=$input_client_id
+export SERVER_IP=$input_server_ip
+export CRYPTO_STACK=$input_stack
+export PROTOCOL_MODE=$PROTOCOL_MODE
+
+echo "🔓 Pre-emptively granting Docker read-access to SSL certificates..."
+sudo chmod -R a+rx certs/
+
+# Optional Quality of Life: Add user to Docker group if not already present
+if command -v docker >/dev/null 2>&1 && ! groups | grep -q "\bdocker\b"; then
+    echo "🔧 First time setup: Adding $USER to the 'docker' group for future convenience..."
+    sudo usermod -aG docker $USER || true
+fi
+
+if docker info >/dev/null 2>&1; then
+    echo "🐳 Running Docker Compose natively..."
+    docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build
+else
+    echo "🐳 Sudo required for Docker. Escalating privileges..."
+    sudo -E docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build
+fi
 
 echo "Done! Run 'docker logs -f fl_$input_client_id' to watch the network traffic."

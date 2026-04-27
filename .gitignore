@@ -33,11 +33,7 @@ logs/
 *.log
 
 # ── Certificates / secrets (generated locally) ───────────────────────────────
-certs/
-*.key
-*.crt
-*.pem
-*.p12
+# certs/ are now allowed to be committed to repo for easier distribution to edge nodes
 
 # ── Docker env overrides ──────────────────────────────────────────────────────
 .env

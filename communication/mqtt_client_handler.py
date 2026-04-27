@@ -13,6 +13,7 @@ class MQTTClientHandler:
         # Configure mTLS if certificates are provided (port usually 8883 for TLS)
         if ca_path and cert_path and key_path:
             self.client.tls_set(ca_certs=ca_path, certfile=cert_path, keyfile=key_path)
+            self.client.tls_insecure_set(True)
             
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
