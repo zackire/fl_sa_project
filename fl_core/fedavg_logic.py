@@ -2,17 +2,6 @@ from typing import List
 import numpy as np
 import logging
 
-def local_fit(model, global_weights: List[np.ndarray]) -> List[np.ndarray]:
-    """
-    Executes the mock local training round on the client.
-    """
-    if global_weights and len(global_weights) > 0:
-        model.set_weights(global_weights)
-    
-    # Run the mock training step
-    model.fit()
-    
-    return model.get_weights()
 
 def aggregate(summed_weights: List[np.ndarray], num_survivors: int) -> List[np.ndarray]:
     """

@@ -16,10 +16,13 @@ services:
       "--stack", "${CRYPTO_STACK}",
       "--ca", "/app/certs/ca.crt",
       "--cert", "/app/certs/client.crt",
-      "--key", "/app/certs/client.key"
+      "--key", "/app/certs/client.key",
+      "--results-dir", "/app/metrics/results"
     ]
     volumes:
       - ./certs/clients/${CLIENT_ID}:/app/certs:ro
+      - ./:/app
+      - ./metrics/results:/app/metrics/results
     networks:
       - fl_network
 

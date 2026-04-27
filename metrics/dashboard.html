@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FL SecAgg Monitor - Live</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap"
+    rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    :root {
+      --bg: #0e0f11;
+      --bg2: #161719;
+      --bg3: #1e2023;
+      --border: rgba(255, 255, 255, 0.07);
+      --border2: rgba(255, 255, 255, 0.12);
+      --text: #e8e8e2;
+      --muted: #7a7a72;
+      --a-col: #4f9eff;
+      --b-col: #56c98a;
+      --c-col: #f5a623;
+      --base-col: #9b8afb;
+      --a-bg: rgba(79, 158, 255, 0.1);
+      --b-bg: rgba(86, 201, 138, 0.1);
+      --c-bg: rgba(245, 166, 35, 0.1);
+      --base-bg: rgba(155, 138, 251, 0.1);
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+      --radius: 8px;
+      --radius-lg: 12px;
+      --log-info:    #e8e8e2;
+      --log-warning: #f5a623;
+      --log-error:   #ff5f5f;
+      --log-debug:   #7a7a72;
+      --log-ts:      #5a87b8;
+      --log-bracket: #9b8afb;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .logo {
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, var(--a-col), var(--b-col));
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono); font-size: 11px; font-weight: 500; color: #fff;
+    }
+    .header h1 { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
+    .header-sub { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-left: 4px; }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--b-col); box-shadow: 0 0 6px var(--b-col);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .header-right {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--mono); font-size: 11px; color: var(--b-col);
+    }
+    .upload-btn {
+      font-family: var(--mono); font-size: 10px;
+      padding: 4px 12px; border-radius: 4px;
+      border: 1px solid var(--border); background: var(--bg3); color: var(--text);
+      cursor: pointer; transition: all .15s; margin-right: 10px; display: inline-block;
+    }
+    .upload-btn:hover { border-color: var(--border2); }
+
+    /* ── Layout ──────────────────────────────────────────────────────── */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0;
+      min-height: calc(100vh - 57px);
+    }
+    .left-panel { overflow-y: auto; padding: 24px 28px; }
+    .left-panel::-webkit-scrollbar { width: 4px; }
+    .left-panel::-webkit-scrollbar-track { background: transparent; }
+    .left-panel::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    /* ── Section titles ──────────────────────────────────────────────── */
+    .sec-title {
+      font-size: 10px; font-weight: 500; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 12px; margin-top: 24px;
+    }
+    .sec-title:first-child { margin-top: 0; }
+
+    /* ── Mode tabs ───────────────────────────────────────────────────── */
+    .mode-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .mode-tab {
+      font-family: var(--mono); font-size: 11px;
+      padding: 5px 14px; border-radius: var(--radius);
+      border: 1px solid var(--border2); background: transparent;
+      color: var(--muted); cursor: pointer; transition: all .15s;
+    }
+    .mode-tab:hover { color: var(--text); }
+    .mode-tab.active-a    { background: var(--a-bg);    border-color: var(--a-col);    color: var(--a-col); }
+    .mode-tab.active-b    { background: var(--b-bg);    border-color: var(--b-col);    color: var(--b-col); }
+    .mode-tab.active-c    { background: var(--c-bg);    border-color: var(--c-col);    color: var(--c-col); }
+    .mode-tab.active-baseline { background: var(--base-bg); border-color: var(--base-col); color: var(--base-col); }
+
+    /* ── Metric cards ────────────────────────────────────────────────── */
+    .metric-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 6px; }
+    .mcard { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; }
+    .mcard-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .mcard-val { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--text); }
+    .mcard-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .mcard-explain { font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.5; border-top: 1px solid var(--border); padding-top: 6px; }
+    .val-warn    { color: var(--c-col); }
+    .val-ok      { color: var(--b-col); }
+    .val-neutral { color: var(--a-col); }
+
+    /* ── Comparison table ────────────────────────────────────────────── */
+    .comp-table-wrap { overflow-x: auto; margin-bottom: 4px; }
+    .comp-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+    .comp-table th {
+      text-align: left; padding: 7px 10px;
+      font-family: var(--sans); font-size: 10px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .comp-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .comp-table tr:last-child td { border-bottom: none; }
+    .comp-table tr:hover td { background: var(--bg3); }
+
+    /* ── Badges ──────────────────────────────────────────────────────── */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-family: var(--sans); font-weight: 500; }
+    .badge-a    { background: var(--a-bg);    color: var(--a-col);    border: 1px solid rgba(79,158,255,.25); }
+    .badge-b    { background: var(--b-bg);    color: var(--b-col);    border: 1px solid rgba(86,201,138,.25); }
+    .badge-c    { background: var(--c-bg);    color: var(--c-col);    border: 1px solid rgba(245,166,35,.25); }
+    .badge-base { background: var(--base-bg); color: var(--base-col); border: 1px solid rgba(155,138,251,.25); }
+
+    /* ── Chart ───────────────────────────────────────────────────────── */
+    .chart-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .chart-tab {
+      font-family: var(--mono); font-size: 10px;
+      padding: 4px 12px; border-radius: 4px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; transition: all .15s;
+    }
+    .chart-tab.active { background: var(--bg3); border-color: var(--border2); color: var(--text); }
+    .chart-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 4px; }
+    .chart-inner { position: relative; width: 100%; height: 220px; }
+    .chart-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+    .chart-legend span { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+    /* ── Raw table ───────────────────────────────────────────────────── */
+    .raw-table-wrap { overflow-x: auto; }
+    .raw-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+    .raw-table th { text-align: right; padding: 6px 10px; font-family: var(--sans); font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--border); }
+    .raw-table th:first-child { text-align: left; }
+    .raw-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; color: var(--muted); }
+    .raw-table td:first-child { text-align: left; color: var(--text); }
+    .raw-table tr:hover td { background: var(--bg3); }
+
+    /* ── Empty state ─────────────────────────────────────────────────── */
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 13px; }
+    .empty-state .big { font-size: 32px; margin-bottom: 10px; color: var(--border2); font-family: var(--mono); }
+    .empty-state p { margin-bottom: 16px; line-height: 1.6; }
+
+    /* ── Misc helpers ────────────────────────────────────────────────── */
+    .divider { height: 1px; background: var(--border); margin: 22px 0; }
+    .f1-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+    .f1-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+    .f1-item input { width: 64px; font-family: var(--mono); font-size: 12px; background: var(--bg3); border: 1px solid var(--border2); color: var(--text); padding: 4px 8px; border-radius: 4px; }
+    .f1-item .fname { font-weight: 500; color: var(--text); }
+
+    /* ── Log panel ───────────────────────────────────────────────────── */
+    .log-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .log-toolbar input[type="text"] {
+      flex: 1;
+      min-width: 160px;
+      font-family: var(--mono);
+      font-size: 11px;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 5px 10px;
+      border-radius: 4px;
+      outline: none;
+    }
+    .log-toolbar input[type="text"]:focus { border-color: var(--a-col); }
+    .log-toolbar label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .log-toolbar label input[type="checkbox"] { accent-color: var(--b-col); }
+    .log-upload-btn {
+      font-family: var(--mono); font-size: 10px;
+      padding: 4px 10px; border-radius: 4px;
+      border: 1px solid var(--border); background: var(--bg3); color: var(--muted);
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .log-upload-btn:hover { border-color: var(--border2); color: var(--text); }
+
+    .log-status {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .log-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 12px 14px;
+      height: 380px;
+      overflow-y: auto;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .log-box::-webkit-scrollbar { width: 4px; }
+    .log-box::-webkit-scrollbar-track { background: transparent; }
+    .log-box::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    /* individual log line */
+    .log-line { display: block; white-space: pre-wrap; word-break: break-all; padding: 1px 0; }
+    .log-line:hover { background: rgba(255,255,255,0.03); border-radius: 3px; }
+
+    /* colour by level */
+    .log-ts      { color: var(--log-ts); }
+    .log-bracket { color: var(--log-bracket); }
+    .log-info    { color: var(--log-info); }
+    .log-warning { color: var(--log-warning); }
+    .log-error   { color: var(--log-error); font-weight: 500; }
+    .log-debug   { color: var(--log-debug); }
+    .log-plain   { color: var(--muted); }
+
+    /* highlight search match */
+    .log-match { background: rgba(245,166,35,0.25); border-radius: 2px; padding: 0 2px; color: var(--c-col); }
+
+    .log-empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+
+<body>
+
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">FL</div>
+      <h1>SecAgg Monitor</h1>
+      <span class="header-sub">· Federated Learning · Secure Aggregation Benchmarks</span>
+    </div>
+    <div class="header-right">
+      <label class="upload-btn">
+        Upload CSV
+        <input type="file" id="csvUpload" accept=".csv" style="display:none;">
+      </label>
+      <div class="status-dot" id="statusDot" style="background:#555;box-shadow:none;animation:none;"
+        title="Waiting for data..."></div>
+      <span id="syncStatus">Waiting for live data...</span>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="left-panel" id="leftPanel">
+      <div class="empty-state" id="emptyState">
+        <div class="big">[ ]</div>
+        <p>Awaiting live measurements...<br>Looking for the latest CSV in the <code>results/</code> folder.</p>
+      </div>
+
+      <div id="mainContent" style="display:none;">
+        <p class="sec-title">Modes detected</p>
+        <div class="mode-tabs" id="modeTabs"></div>
+
+        <p class="sec-title">Summary metrics <span
+            style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;">(averages, round 1 excluded
+            as warmup)</span></p>
+        <div class="metric-grid" id="metricGrid"></div>
+
+        <div class="divider"></div>
+
+        <p class="sec-title">Privacy-Efficiency Ratio — enter your F1 scores</p>
+        <div class="f1-row" id="f1Row"></div>
+        <div class="comp-table-wrap" style="margin-top:10px;">
+          <table class="comp-table" id="perTable">
+            <thead>
+              <tr>
+                <th>Mode</th>
+                <th>Algorithms</th>
+                <th>O (overhead)</th>
+                <th>F1 score</th>
+                <th>PER = F1 / O</th>
+                <th>Latency RAF</th>
+                <th>BW RAF</th>
+                <th>CPU RAF</th>
+                <th>RAM RAF</th>
+              </tr>
+            </thead>
+            <tbody id="perBody"></tbody>
+          </table>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:8px;">
+          PER = F1 / O. Higher is better. O = 0.4·(L_ratio) + 0.2·(CPU_ratio) + 0.2·(RAM_ratio) + 0.2·(BW_ratio)
+          relative to baseline.
+        </p>
+
+        <div class="divider"></div>
+
+        <p class="sec-title">Round-by-round comparison</p>
+        <div class="chart-tabs" id="chartTabs">
+          <button class="chart-tab active" onclick="switchMetric('latency_s',this)">Latency</button>
+          <button class="chart-tab" onclick="switchMetric('cpu_avg_pct',this)">CPU</button>
+          <button class="chart-tab" onclick="switchMetric('ram_avg_mb',this)">RAM</button>
+          <button class="chart-tab" onclick="switchMetric('bandwidth_bytes',this)">Bandwidth</button>
+        </div>
+        <div class="chart-wrap">
+          <div class="chart-legend" id="chartLegend"></div>
+          <div class="chart-inner"><canvas id="mainChart" role="img"></canvas></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <p class="sec-title">Raw measurements</p>
+        <div class="raw-table-wrap">
+          <table class="raw-table" id="rawTable">
+            <thead>
+              <tr>
+                <th>Mode</th><th>Round</th><th>Timestamp</th>
+                <th>Latency (s)</th><th>CPU (%)</th><th>RAM (MB)</th><th>BW (bytes)</th>
+              </tr>
+            </thead>
+            <tbody id="rawBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── SESSION LOGS PANEL ─────────────────────────────────────── -->
+      <div class="divider"></div>
+      <p class="sec-title" id="logSectionTitle">Session Logs
+        <span style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;" id="logFileLabel"></span>
+      </p>
+
+      <div class="log-toolbar">
+        <input type="text" id="logFilter" placeholder="Filter by keyword…" oninput="renderLogs()">
+        <label><input type="checkbox" id="logAutoScroll" checked> Auto-scroll</label>
+        <label><input type="checkbox" id="logShowInfo"    checked> INFO</label>
+        <label><input type="checkbox" id="logShowWarning" checked> WARNING</label>
+        <label><input type="checkbox" id="logShowError"   checked> ERROR</label>
+        <label class="log-upload-btn">
+          Upload log
+          <input type="file" id="logUpload" accept=".log,.txt" style="display:none;">
+        </label>
+        <span class="log-status" id="logStatus">Fetching…</span>
+      </div>
+
+      <div class="log-box" id="logBox">
+        <div class="log-empty">Connecting to server log…</div>
+      </div>
+
+    </div><!-- /left-panel -->
+  </div><!-- /layout -->
+
+  <script>
+    /* ================================================================
+       METRICS SECTION
+    ================================================================ */
+    const MODES = {
+      stack_a:  { label:'Stack A',   algos:'X25519 + ChaCha20 + Ascon-128',   col:'#4f9eff', bg:'var(--a-bg)',    badge:'badge-a',    tabClass:'active-a'    },
+      stack_b:  { label:'Stack B',   algos:'X25519 + SIMON + Ascon-128',       col:'#56c98a', bg:'var(--b-bg)',    badge:'badge-b',    tabClass:'active-b'    },
+      stack_c:  { label:'Stack C',   algos:'X25519 + PRESENT + ChaChaPoly',    col:'#f5a623', bg:'var(--c-bg)',    badge:'badge-c',    tabClass:'active-c'    },
+      baseline: { label:'Baseline',  algos:'No secure aggregation',             col:'#9b8afb', bg:'var(--base-bg)', badge:'badge-base', tabClass:'active-baseline' },
+    };
+    const METRIC_INFO = {
+      latency_s:       { label:'Avg Latency', unit:'s',   precision:4 },
+      cpu_avg_pct:     { label:'Avg CPU',     unit:'%',   precision:1 },
+      ram_avg_mb:      { label:'Avg RAM',     unit:' MB', precision:1 },
+      bandwidth_bytes: { label:'Avg BW',      unit:' B',  precision:0 },
+    };
+    const WEIGHTS = { latency_s:0.4, cpu_avg_pct:0.2, ram_avg_mb:0.2, bandwidth_bytes:0.2 };
+
+    let allData       = [];
+    let currentMetric = 'latency_s';
+    let chartInst     = null;
+    let isLive        = true;
+    let f1Values      = { stack_a:0.90, stack_b:0.90, stack_c:0.90, baseline:0.87 };
+
+    function parseCSV(text) {
+      const lines = text.trim().split('\n');
+      if (lines.length < 2) return [];
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/ /g,'_'));
+      return lines.slice(1).filter(l => l.trim()).map(line => {
+        const vals = line.split(',').map(v => v.trim());
+        const obj  = {};
+        headers.forEach((h,i) => { obj[h] = isNaN(vals[i]) ? vals[i] : parseFloat(vals[i]); });
+        return obj;
+      });
+    }
+
+    function avg(arr, key, skipRound1=true) {
+      const filtered = skipRound1 ? arr.filter(r => r.round_num>1) : arr;
+      if (!filtered.length) return 0;
+      return filtered.reduce((s,r) => s+(r[key]||0), 0) / filtered.length;
+    }
+
+    function fmt(val, precision) { return precision===0 ? Math.round(val) : val.toFixed(precision); }
+
+    function render() {
+      if (!allData.length) return;
+      const modes  = [...new Set(allData.map(r => r.mode))].filter(m => MODES[m]);
+      const byMode = {};
+      modes.forEach(m => { byMode[m] = allData.filter(r => r.mode===m); });
+
+      const baseMode = modes.includes('baseline') ? 'baseline' : modes[0];
+      const baseAvgs = {};
+      Object.keys(METRIC_INFO).forEach(k => { baseAvgs[k] = avg(byMode[baseMode], k) || 1; });
+
+      document.getElementById('emptyState').style.display   = 'none';
+      document.getElementById('mainContent').style.display  = 'block';
+
+      const tabsEl = document.getElementById('modeTabs');
+      tabsEl.innerHTML = '';
+      modes.forEach(m => {
+        const btn = document.createElement('button');
+        btn.className   = `mode-tab ${MODES[m].tabClass}`;
+        btn.textContent = `${MODES[m].label} — ${MODES[m].algos}`;
+        tabsEl.appendChild(btn);
+      });
+
+      const grid = document.getElementById('metricGrid');
+      grid.innerHTML = '';
+      grid.style.gridTemplateColumns = `repeat(${Math.min(modes.length,4)}, 1fr)`;
+      modes.forEach(m => {
+        const latAvg = avg(byMode[m], 'latency_s');
+        const bwAvg  = avg(byMode[m], 'bandwidth_bytes');
+        const minfo  = MODES[m];
+        const raf    = latAvg / baseAvgs['latency_s'];
+        const rafClass = raf>3 ? 'val-warn' : raf>1.5 ? 'val-neutral' : 'val-ok';
+        const card = document.createElement('div');
+        card.className = 'mcard';
+        card.innerHTML = `
+          <div class="mcard-label"><span class="badge ${minfo.badge}">${minfo.label}</span></div>
+          <div class="mcard-val ${rafClass}">${latAvg.toFixed(2)}s</div>
+          <div class="mcard-sub">avg latency · RAF <span class="${rafClass}">${raf.toFixed(2)}×</span></div>
+          <div class="mcard-explain">${minfo.algos}<br>BW avg: ${Math.round(bwAvg)} B/round</div>`;
+        grid.appendChild(card);
+      });
+
+      const f1Row = document.getElementById('f1Row');
+      if (f1Row.children.length === 0) {
+        modes.forEach(m => {
+          const item = document.createElement('div');
+          item.className = 'f1-item';
+          item.innerHTML = `<span class="badge ${MODES[m].badge} fname">${MODES[m].label}</span> F1 <input type="number" min="0" max="1" step="0.01" value="${f1Values[m]??0.90}" data-mode="${m}">`;
+          f1Row.appendChild(item);
+          item.querySelector('input').addEventListener('input', e => {
+            f1Values[m] = parseFloat(e.target.value) || 0;
+            renderPER(modes, byMode, baseAvgs);
+          });
+        });
+      }
+      renderPER(modes, byMode, baseAvgs);
+      renderChart(modes, byMode);
+
+      const rawBody = document.getElementById('rawBody');
+      rawBody.innerHTML = '';
+      [...allData].reverse().forEach(r => {
+        const minfo = MODES[r.mode] || {};
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="badge ${minfo.badge||''}">${minfo.label||r.mode}</span></td>
+          <td>${r.round_num}</td>
+          <td style="color:var(--muted)">${r.timestamp||''}</td>
+          <td>${(r.latency_s||0).toFixed(4)}</td>
+          <td>${(r.cpu_avg_pct||0).toFixed(1)}</td>
+          <td>${(r.ram_avg_mb||0).toFixed(1)}</td>
+          <td>${Math.round(r.bandwidth_bytes||0)}</td>`;
+        rawBody.appendChild(tr);
+      });
+    }
+
+    function computeO(modeAvgs, baseAvgs) {
+      let o = 0;
+      Object.keys(WEIGHTS).forEach(k => {
+        const ratio = baseAvgs[k]>0 ? (modeAvgs[k]||0)/baseAvgs[k] : 1;
+        o += WEIGHTS[k]*ratio;
+      });
+      return o;
+    }
+
+    function renderPER(modes, byMode, baseAvgs) {
+      const tbody = document.getElementById('perBody');
+      tbody.innerHTML = '';
+      modes.forEach(m => {
+        const mAvgs = {};
+        Object.keys(METRIC_INFO).forEach(k => { mAvgs[k] = avg(byMode[m], k); });
+        const O   = computeO(mAvgs, baseAvgs);
+        const f1  = f1Values[m] ?? 0.90;
+        const per = f1 / O;
+        const minfo = MODES[m];
+        const rafs  = Object.keys(METRIC_INFO).map(k => baseAvgs[k]>0 ? (mAvgs[k]/baseAvgs[k]) : 1);
+        const perClass = per>0.7 ? 'val-ok' : per>0.4 ? 'val-neutral' : 'val-warn';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="badge ${minfo.badge}">${minfo.label}</span></td>
+          <td style="color:var(--muted);font-size:10px;">${minfo.algos}</td>
+          <td>${O.toFixed(3)}</td>
+          <td>${f1.toFixed(2)}</td>
+          <td class="${perClass}" style="font-weight:500;">${per.toFixed(3)}</td>
+          <td>${rafs[0].toFixed(2)}×</td>
+          <td>${rafs[3].toFixed(2)}×</td>
+          <td>${rafs[1].toFixed(2)}×</td>
+          <td>${rafs[2].toFixed(2)}×</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderChart(modes, byMode) {
+      const k     = currentMetric;
+      const minfo = METRIC_INFO[k];
+      const maxRound = Math.max(...allData.map(r => r.round_num));
+      const labels   = Array.from({length:maxRound}, (_,i) => 'R'+(i+1));
+
+      const datasets = modes.map(m => ({
+        label: MODES[m].label,
+        data: Array.from({length:maxRound}, (_,i) => {
+          const row = byMode[m].find(r => r.round_num===i+1);
+          return row ? row[k] : null;
+        }),
+        borderColor: MODES[m].col,
+        backgroundColor: 'transparent',
+        pointBackgroundColor: MODES[m].col,
+        pointRadius: 4, tension: 0.3, spanGaps: true,
+      }));
+
+      const legendEl = document.getElementById('chartLegend');
+      legendEl.innerHTML = modes.map(m =>
+        `<span><span class="legend-dot" style="background:${MODES[m].col};"></span>${MODES[m].label}</span>`
+      ).join('');
+
+      if (chartInst) chartInst.destroy();
+      chartInst = new Chart(document.getElementById('mainChart'), {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          animation: false,
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: ctx => ctx.dataset.label+': '+(ctx.parsed.y??'--')+minfo.unit } } },
+          scales: {
+            x: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#7a7a72', font:{family:'IBM Plex Mono',size:10}} },
+            y: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#7a7a72', font:{family:'IBM Plex Mono',size:10}, callback:v => fmt(v,minfo.precision)+minfo.unit}, title:{display:true, text:minfo.label, color:'#7a7a72', font:{family:'IBM Plex Sans',size:10}} }
+          }
+        }
+      });
+    }
+
+    function switchMetric(key, btn) {
+      currentMetric = key;
+      document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    }
+
+    // --- CSV upload ---
+    document.getElementById('csvUpload').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      isLive = false;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        allData = parseCSV(ev.target.result);
+        render();
+        document.getElementById('statusDot').style.cssText = 'background:#4f9eff;box-shadow:none;animation:none;';
+        document.getElementById('syncStatus').innerText      = `Viewing: ${file.name}`;
+        document.getElementById('syncStatus').style.color   = '#4f9eff';
+      };
+      reader.readAsText(file);
+    });
+
+    // --- Live CSV fetch ---
+    async function fetchLiveData() {
+      if (!isLive) return;
+      try {
+        const dirRes = await fetch('results/');
+        if (!dirRes.ok) throw new Error('Cannot access results/ folder');
+        const dirText = await dirRes.text();
+
+        const parser = new DOMParser();
+        const doc    = parser.parseFromString(dirText, 'text/html');
+        const links  = Array.from(doc.querySelectorAll('a'))
+          .map(a => a.getAttribute('href'))
+          .filter(href => href && href.endsWith('.csv'));
+
+        if (links.length === 0) throw new Error('No CSV files found in results/');
+
+        links.sort((a,b) => {
+          const mA = a.match(/_(\d{8}_\d{6})\.csv$/), mB = b.match(/_(\d{8}_\d{6})\.csv$/);
+          return (mA?mA[1]:'').localeCompare(mB?mB[1]:'');
+        });
+
+        const latestCsvName = links[links.length-1];
+        const csvRes = await fetch(`results/${latestCsvName}`);
+        if (csvRes.ok) {
+          const text    = await csvRes.text();
+          const newData = parseCSV(text);
+          if (newData.length !== allData.length || latestCsvName !== window._lastFetchedFile) {
+            allData = newData;
+            window._lastFetchedFile = latestCsvName;
+            render();
+          }
+          document.getElementById('statusDot').style.cssText = 'background:#56c98a;box-shadow:0 0 6px #56c98a;animation:pulse 2s infinite;';
+          const shortName = latestCsvName.replace('metrics_','').replace('.csv','');
+          document.getElementById('syncStatus').innerText    = `Live: ${shortName}`;
+          document.getElementById('syncStatus').style.color = '#56c98a';
+        }
+      } catch (err) {
+        document.getElementById('statusDot').style.cssText = 'background:#f5a623;box-shadow:none;animation:none;';
+        document.getElementById('syncStatus').innerText    = 'No CSV in results/';
+        document.getElementById('syncStatus').style.color = '#f5a623';
+      }
+    }
+
+    setInterval(fetchLiveData, 2000);
+    fetchLiveData();
+
+    /* ================================================================
+       SESSION LOGS SECTION
+       Polls ../logs/server.log every 3 s.
+       Falls back gracefully if the file is not yet available.
+    ================================================================ */
+
+    // Log file path relative to this page (served from metrics/)
+    const LOG_PATHS = [
+      'logs/server.log',
+      'logs/client1.log',
+      'logs/client2.log',
+      'logs/client3.log',
+    ];
+    let currentLogPath  = LOG_PATHS[0];
+    let allLogLines     = [];   // raw string lines
+    let isLiveLogs      = true;
+    let lastLogContent  = '';
+
+    // Build a tiny tab row for the log sources
+    (function buildLogTabs() {
+      const sectionTitle = document.getElementById('logSectionTitle');
+      const tabBar = document.createElement('div');
+      tabBar.style.cssText = 'display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
+
+      LOG_PATHS.forEach((path, idx) => {
+        const name = path.split('/').pop().replace('.log','');
+        const btn  = document.createElement('button');
+        btn.className   = 'chart-tab' + (idx===0 ? ' active' : '');
+        btn.textContent = name;
+        btn.id          = `logtab_${idx}`;
+        btn.onclick = () => {
+          isLiveLogs     = true;
+          currentLogPath = path;
+          allLogLines    = [];
+          lastLogContent = '';
+          document.querySelectorAll('[id^=logtab_]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          document.getElementById('logStatus').textContent = 'Fetching…';
+          document.getElementById('logBox').innerHTML = '<div class="log-empty">Loading…</div>';
+          fetchLiveLogs();
+        };
+        tabBar.appendChild(btn);
+      });
+
+      // Insert tab bar before the toolbar
+      const toolbar = document.querySelector('.log-toolbar');
+      toolbar.parentNode.insertBefore(tabBar, toolbar);
+    })();
+
+    /* Colourises a single raw log line into an HTML <span> */
+    function colourLine(raw, filterText) {
+      // Detect level
+      let levelClass = 'log-plain';
+      if (/- INFO -/.test(raw))    levelClass = 'log-info';
+      if (/- WARNING -/.test(raw)) levelClass = 'log-warning';
+      if (/- ERROR -/.test(raw))   levelClass = 'log-error';
+      if (/- DEBUG -/.test(raw))   levelClass = 'log-debug';
+
+      // Escape HTML
+      let escaped = raw
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+      // Colourize timestamp prefix  "2026-04-25 11:15:22,152"
+      escaped = escaped.replace(
+        /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+)/,
+        '<span class="log-ts">$1</span>'
+      );
+      // Colourize [bracketed] tokens
+      escaped = escaped.replace(
+        /(\[[^\]]+\])/g,
+        '<span class="log-bracket">$1</span>'
+      );
+
+      // Highlight filter match
+      if (filterText) {
+        const esc = filterText.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+        escaped = escaped.replace(
+          new RegExp(`(${esc})`, 'gi'),
+          '<span class="log-match">$1</span>'
+        );
+      }
+
+      return `<span class="log-line ${levelClass}">${escaped}</span>`;
+    }
+
+    function shouldShowLine(raw) {
+      const showInfo    = document.getElementById('logShowInfo').checked;
+      const showWarning = document.getElementById('logShowWarning').checked;
+      const showError   = document.getElementById('logShowError').checked;
+      const filter      = document.getElementById('logFilter').value.trim().toLowerCase();
+
+      // Level filter
+      if (!showInfo    && /- INFO -/.test(raw))    return false;
+      if (!showWarning && /- WARNING -/.test(raw)) return false;
+      if (!showError   && /- ERROR -/.test(raw))   return false;
+
+      // Keyword filter
+      if (filter && !raw.toLowerCase().includes(filter)) return false;
+      return true;
+    }
+
+    function renderLogs() {
+      const box        = document.getElementById('logBox');
+      const filterText = document.getElementById('logFilter').value.trim();
+
+      if (!allLogLines.length) {
+        box.innerHTML = '<div class="log-empty">No log lines loaded yet.</div>';
+        return;
+      }
+
+      const filtered = allLogLines.filter(shouldShowLine);
+      if (!filtered.length) {
+        box.innerHTML = '<div class="log-empty">No lines match the current filter.</div>';
+        return;
+      }
+
+      box.innerHTML = filtered.map(line => colourLine(line, filterText)).join('\n');
+
+      if (document.getElementById('logAutoScroll').checked) {
+        box.scrollTop = box.scrollHeight;
+      }
+    }
+
+    async function fetchLiveLogs() {
+      if (!isLiveLogs) return;
+      try {
+        // Use cache-busting query param so the browser doesn't cache the file
+        const res = await fetch(`${currentLogPath}?_=${Date.now()}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const text = await res.text();
+        if (text !== lastLogContent) {
+          lastLogContent = text;
+          // Split by newline, keep non-empty lines
+          allLogLines = text.split('\n').filter(l => l.length > 0);
+          renderLogs();
+        }
+
+        const lineCount = allLogLines.length;
+        document.getElementById('logStatus').textContent =
+          `${lineCount} lines · live`;
+        document.getElementById('logStatus').style.color = '#56c98a';
+
+        // Update label in section title
+        document.getElementById('logFileLabel').textContent =
+          `· ${currentLogPath.split('/').pop()}`;
+
+      } catch (err) {
+        document.getElementById('logStatus').textContent = `Unavailable: ${err.message}`;
+        document.getElementById('logStatus').style.color = '#f5a623';
+
+        if (!allLogLines.length) {
+          document.getElementById('logBox').innerHTML =
+            `<div class="log-empty">Cannot fetch log file.<br><code>${currentLogPath}</code><br><br>` +
+            `Make sure the HTTP server has access to the <code>logs/</code> directory<br>` +
+            `Or upload a log file manually using the button above.</div>`;
+        }
+      }
+    }
+
+    // Manual log upload
+    document.getElementById('logUpload').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      isLiveLogs = false;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        allLogLines = ev.target.result.split('\n').filter(l => l.length>0);
+        renderLogs();
+        document.getElementById('logStatus').textContent = `${allLogLines.length} lines · ${file.name}`;
+        document.getElementById('logStatus').style.color = '#4f9eff';
+        document.getElementById('logFileLabel').textContent = `· ${file.name}`;
+      };
+      reader.readAsText(file);
+    });
+
+    // Rerender on filter/checkbox changes
+    ['logShowInfo','logShowWarning','logShowError'].forEach(id => {
+      document.getElementById(id).addEventListener('change', renderLogs);
+    });
+
+    // Poll every 3 s
+    setInterval(fetchLiveLogs, 3000);
+    fetchLiveLogs();
+
+  </script>
+</body>
+
+</html>
