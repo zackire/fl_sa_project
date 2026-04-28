@@ -65,6 +65,7 @@ def main():
                 client_id=args.id,
                 mqtt_handler=mqtt_handler,
                 local_model=ml_model,
+                metrics=collector,
             )
         else:
             logger.info(f"--- [{args.id}] BOOTING IN SECURE AGGREGATION MODE (STACK {args.stack}) ---")

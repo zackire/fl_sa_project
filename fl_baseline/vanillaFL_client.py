@@ -4,12 +4,23 @@ import numpy as np
 
 
 class VanillaFLClient:
-    def __init__(self, client_id: str, mqtt_handler, local_model):
+    def __init__(self, client_id: str, mqtt_handler, local_model, metrics=None):
         self.client_id = client_id
         self.mqtt = mqtt_handler
         self.model = local_model
+        self.metrics = metrics
+        self.current_round = 1
 
         self._check_in_with_server()
+
+    # ---------------------------------------------------------------------- #
+    #  MQTT interface                                                         #
+    # ---------------------------------------------------------------------- #
+
+    def _publish(self, topic: str, payload: str):
+        if self.metrics:
+            self.metrics.record_bytes(len(payload.encode("utf-8")))
+        self.mqtt.publish(topic, payload)
 
     # ---------------------------------------------------------------------- #
     #  MQTT interface                                                         #
@@ -20,18 +31,27 @@ class VanillaFLClient:
         payload = json.dumps({
             "meta": {"client_id": self.client_id, "msg_type": "checkin"}
         })
-        self.mqtt.publish(f"fl/client/{self.client_id}/to_server", payload)
+        self._publish(f"fl/client/{self.client_id}/to_server", payload)
 
     def process_mqtt_message(self, topic: str, payload: str):
+        if self.metrics:
+            self.metrics.record_recv_bytes(len(payload.encode("utf-8")))
+            
         full_payload = json.loads(payload)
         meta = full_payload.get("meta", {})
         data = full_payload.get("data", {})
         msg_type = meta.get("msg_type")
 
         if msg_type == "global_model":
+            self.current_round += 1
+            if self.metrics:
+                self.metrics.round_start(self.current_round)
             self._handle_global_model(data)
         elif msg_type == "ignition":
             round_num = meta.get("round", 1)
+            self.current_round = round_num
+            if self.metrics:
+                self.metrics.round_start(self.current_round)
             logging.info(f"[{self.client_id}] Ignition received — starting Round {round_num}.")
             self._send_weights()
 
@@ -63,8 +83,11 @@ class VanillaFLClient:
             "meta": {"client_id": self.client_id, "msg_type": "raw_weights"},
             "data": {"weights": weights_list}
         })
-        self.mqtt.publish(f"fl/client/{self.client_id}/to_server", payload)
+        self._publish(f"fl/client/{self.client_id}/to_server", payload)
         logging.info(f"[{self.client_id}] Weights published to server ✓")
+        
+        if self.metrics:
+            self.metrics.round_end(self.current_round)
 
 
 # ---------------------------------------------------------------------- #

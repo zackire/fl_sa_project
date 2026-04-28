@@ -22,6 +22,8 @@ class VanillaFLServer:
     # ---------------------------------------------------------------------- #
 
     def process_mqtt_message(self, topic: str, payload: str):
+        if self.metrics:
+            self.metrics.record_recv_bytes(len(payload.encode("utf-8")))
         full_payload = json.loads(payload)
         meta = full_payload.get("meta", {})
         data = full_payload.get("data", {})
