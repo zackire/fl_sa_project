@@ -25,8 +25,8 @@ venv/
 env/
 
 # ── Metrics results (CSVs) ────────────────────────────────────────────────────
-metrics/results/
-metrics/results/*.csv
+metrics/results/utilities/*.csv
+metrics/results/model
 metrics/logs/
 
 # ── Log files ─────────────────────────────────────────────────────────────────

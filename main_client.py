@@ -7,30 +7,40 @@ from communication.logger_utils import setup_custom_logger
 from communication.mqtt_client_handler import MQTTClientHandler
 from secure_aggregation.sa_client_orchestrator import SecureAggregationClient
 from fl_baseline.vanillaFL_client import VanillaFLClient
-from fl_core.model import MockSecAggModel
+from fl_core.model import LocalLogisticRegressionModel  # real model
 from metrics.metrics_collector import MetricsCollector
 
 from crypto.stacks.stack_a import Stack1Crypto
 from crypto.stacks.stack_b import Stack2Crypto
 from crypto.stacks.stack_c import Stack3Crypto
 
+# ─── Default dataset path ─────────────────────────────────────────────────────
+# Override via --data-path CLI flag or DATA_PATH environment variable.
+DEFAULT_DATA_PATH = os.getenv("DATA_PATH", "/data/Train_Test_Network.csv")
+
 
 def main():
     parser = argparse.ArgumentParser(description="FL Client Entry Point")
-    parser.add_argument("--id",    type=str, required=True, help="Client ID")
-    parser.add_argument("--ip",    type=str, required=True, help="MQTT Broker IP")
-    parser.add_argument("--stack", type=str, required=True, choices=["A", "B", "C"])
-    parser.add_argument("--ca",    type=str, default="/app/certs/ca.crt")
-    parser.add_argument("--cert",  type=str, default="/app/certs/client.crt")
-    parser.add_argument("--key",   type=str, default="/app/certs/client.key")
-    parser.add_argument("--results-dir", type=str, default="metrics/results",
-                        help="Directory to write metrics CSV files (default: metrics/results/)")
+    parser.add_argument("--id",        type=str,   required=True,  help="Client ID (client1 / client2 / client3)")
+    parser.add_argument("--ip",        type=str,   required=True,  help="MQTT Broker IP")
+    parser.add_argument("--stack",     type=str,   required=True,  choices=["A", "B", "C"])
+    parser.add_argument("--ca",        type=str,   default="/app/certs/ca.crt")
+    parser.add_argument("--cert",      type=str,   default="/app/certs/client.crt")
+    parser.add_argument("--key",       type=str,   default="/app/certs/client.key")
+    parser.add_argument("--data-path", type=str,   default=DEFAULT_DATA_PATH,
+                        help="Path to Train_Test_Network.csv (default: /data/Train_Test_Network.csv)")
+    parser.add_argument("--epochs",    type=int,   default=int(os.getenv("LOCAL_EPOCHS", 3)),
+                        help="Local training epochs per FL round (default: 3)")
+    parser.add_argument("--lr",        type=float, default=float(os.getenv("LEARNING_RATE", 0.01)),
+                        help="SGD learning rate (default: 0.01)")
+    parser.add_argument("--results-dir", type=str, default="metrics/results/utilities",
+                        help="Directory to write metrics CSV files (default: metrics/results/utilities)")
     args = parser.parse_args()
 
     logger = setup_custom_logger(args.id)
     mode   = os.getenv("PROTOCOL_MODE", "secagg").lower()
 
-    # ── Determine metric label ──────────────────────────────────────────────
+    # ── Metrics collector ────────────────────────────────────────────────────
     if mode == "baseline":
         collector = MetricsCollector(
             protocol="baseline",
@@ -57,7 +67,19 @@ def main():
             key_path=args.key,
         )
 
-        ml_model = MockSecAggModel(client_id=args.id, num_features=10)
+        # ── Real model: loads and preprocesses its 1/3 partition on construction ──
+        ml_model = LocalLogisticRegressionModel(
+            client_id=args.id,
+            data_path=args.data_path,
+            local_epochs=args.epochs,
+            learning_rate=args.lr,
+        )
+
+        # Run an initial fit() so the client always has real trained weights
+        # before the first FL round begins.  The server's first broadcast will
+        # warm-start from these via set_weights() + fit().
+        logger.info(f"[{args.id}] Running initial local fit before connecting …")
+        ml_model.fit()
 
         if mode == "baseline":
             logger.info(f"--- [{args.id}] BOOTING IN VANILLA FL MODE ---")
@@ -90,8 +112,6 @@ def main():
         if mode == "baseline":
             logger.info(f"[{args.id}] Baseline standby. Waiting for server ignition...")
         else:
-            # Trigger Round 0 AFTER the broker connection is established.
-            # Only the command key matters — _execute_round_0 ignores everything else.
             logger.info(f"[{args.id}] SecAgg Round 0 triggered.")
             orchestrator._execute_round_0(data={"command": "ignite_fl"})
 
@@ -99,7 +119,7 @@ def main():
             time.sleep(1)
 
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Error: {e}", exc_info=True)
         sys.exit(1)
     except KeyboardInterrupt:
         collector.print_summary()

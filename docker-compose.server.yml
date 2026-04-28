@@ -1,5 +1,7 @@
 version: '3.8'
+
 services:
+
   mqtt-broker:
     image: eclipse-mosquitto:latest
     container_name: fl_mosquitto_broker
@@ -21,14 +23,38 @@ services:
       - THRESHOLD_T=${THRESHOLD_T:-2}
       - CRYPTO_STACK=${CRYPTO_STACK:-A}
       - PROTOCOL_MODE=${PROTOCOL_MODE:-secagg}
+      # Path inside the container — matches the volume mount below
+      - DATA_PATH=/app/data/Train_Test_Network.csv
+      # ── Kaggle credentials (required if dataset is not pre-mounted) ──────────
+      - KAGGLE_USERNAME=sananebilader123
+      - KAGGLE_KEY=KGAT_74df568a52b6bf7b84126d0c685e302d
     volumes:
       - ./certs/clients/fl_server:/app/certs:ro
       - ./:/app
-      - ./metrics/results:/app/metrics/results
-    command: ["sh", "-c", "python main_server.py --ip mqtt-broker --k $${EXPECTED_K} --t $${THRESHOLD_T} --stack $${CRYPTO_STACK} --ca /app/certs/ca.crt --cert /app/certs/client.crt --key /app/certs/client.key --results-dir /app/metrics/results"]
+      - ./metrics/results:/app/metrics/results/utilities
+      # Dataset: place Train_Test_Network.csv in ./data/ next to docker-compose
+      - ./data:/app/data:ro
+      # Persist the kagglehub download cache across container restarts
+      - kaggle_cache:/root/.cache/kagglehub
+    command: [
+      "sh", "-c",
+      "python main_server.py
+         --ip        mqtt-broker
+         --k         $${EXPECTED_K}
+         --t         $${THRESHOLD_T}
+         --stack     $${CRYPTO_STACK}
+         --ca        /app/certs/ca.crt
+         --cert      /app/certs/client.crt
+         --key       /app/certs/client.key
+         --data-path /app/data/Train_Test_Network.csv
+         --results-dir /app/metrics/results/utilities"
+    ]
     networks:
       - fl_shared_bridge
 
 networks:
   fl_shared_bridge:
     external: true
+
+volumes:
+  kaggle_cache:

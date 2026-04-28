@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+
   fl-client:
     build: .
     container_name: fl_${CLIENT_ID}
@@ -8,21 +9,35 @@ services:
       - CLIENT_ID=${CLIENT_ID}
       - SERVER_IP=${SERVER_IP}
       - CRYPTO_STACK=${CRYPTO_STACK}
-      - PROTOCOL_MODE=${PROTOCOL_MODE:-secagg} 
+      - PROTOCOL_MODE=${PROTOCOL_MODE:-secagg}
+      # Path inside the container — matches the volume mount below
+      - DATA_PATH=/app/data/Train_Test_Network.csv
+      # Tune training without rebuilding the image
+      - LOCAL_EPOCHS=${LOCAL_EPOCHS:-3}
+      - LEARNING_RATE=${LEARNING_RATE:-0.01}
+      # ── Kaggle credentials (required if dataset is not pre-mounted) ──────────
+      - KAGGLE_USERNAME=sananebilader123
+      - KAGGLE_KEY=KGAT_74df568a52b6bf7b84126d0c685e302d
     command: [
-      "python", "main_client.py", 
-      "--id", "${CLIENT_ID}", 
-      "--ip", "${SERVER_IP}", 
-      "--stack", "${CRYPTO_STACK}",
-      "--ca", "/app/certs/ca.crt",
-      "--cert", "/app/certs/client.crt",
-      "--key", "/app/certs/client.key",
-      "--results-dir", "/app/metrics/results"
+      "python", "main_client.py",
+      "--id",        "${CLIENT_ID}",
+      "--ip",        "${SERVER_IP}",
+      "--stack",     "${CRYPTO_STACK}",
+      "--ca",        "/app/certs/ca.crt",
+      "--cert",      "/app/certs/client.crt",
+      "--key",       "/app/certs/client.key",
+      "--data-path", "/app/data/Train_Test_Network.csv",
+      "--epochs",    "${LOCAL_EPOCHS:-3}",
+      "--results-dir", "/app/metrics/results/utilities"
     ]
     volumes:
       - ./certs/clients/${CLIENT_ID}:/app/certs:ro
       - ./:/app
-      - ./metrics/results:/app/metrics/results
+      - ./metrics/results:/app/metrics/results/utilities
+      # Dataset: same ./data/ folder, read-only in every client container
+      - ./data:/app/data:ro
+      # Persist the kagglehub download cache across container restarts
+      - kaggle_cache:/root/.cache/kagglehub
     networks:
       - fl_network
 
@@ -30,3 +45,6 @@ networks:
   fl_network:
     external: true
     name: fl_shared_bridge
+
+volumes:
+  kaggle_cache:

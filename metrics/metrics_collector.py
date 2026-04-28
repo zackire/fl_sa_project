@@ -27,8 +27,8 @@ CSV filename format:
 Docker note:
   Mount the output directory as a volume so the CSV is visible on the host:
       volumes:
-        - ./metrics/results:/app/metrics/results
-  Then pass --results-dir /app/metrics/results to main_server.py / main_client.py.
+        - ./metrics/results:/app/metrics/results/utilities
+  Then pass --results-dir /app/metrics/results/utilities to main_server.py / main_client.py.
 
 psutil + Docker note:
   cpu_percent(interval=None) always returns 0.0 on the first call inside a
@@ -129,7 +129,7 @@ class MetricsCollector:
                  stack: str,
                  role: str,
                  node_id: str,
-                 output_dir: str = "/app/metrics/results"):
+                 output_dir: str = "/app/metrics/results/utilities"):
         """
         Args:
             protocol:   "secagg" or "baseline"
