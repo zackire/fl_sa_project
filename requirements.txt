@@ -4,6 +4,8 @@ numpy>=1.24.0
 
 # Protocol & ML Core Utilities
 scikit-learn>=1.0.0
+pandas>=2.0
+scipy>=1.11                # required by scikit-learn internally
 
 # Core Cryptography & SSS (Stacks & Utils)
 cryptography>=41.0.0
@@ -14,3 +16,8 @@ simonspeckciphers>=1.0.0
 
 # Metrics — CPU / RAM sampling (metrics/metrics_collector.py)
 psutil>=5.9.0
+
+# Kaggle dataset auto-download (used by fl_core/model.py)
+kagglehub>=0.3.0
+
+

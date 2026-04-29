@@ -53,6 +53,9 @@ class VanillaFLClient:
             if self.metrics:
                 self.metrics.round_start(self.current_round)
             logging.info(f"[{self.client_id}] Ignition received — starting Round {round_num}.")
+            # Train locally on current (initialised) weights before sending
+            logging.info(f"[{self.client_id}] Running local training on ignition …")
+            self.model.fit()
             self._send_weights()
 
     # ---------------------------------------------------------------------- #
@@ -68,6 +71,10 @@ class VanillaFLClient:
             _log_weights(self.client_id, global_weights, label="Global model")
             self.model.set_weights(global_weights)
 
+        # Train locally on this client's partition before sending weights back.
+        # In vanilla FL these local updates go out as plaintext — no masking.
+        logging.info(f"[{self.client_id}] Running local training …")
+        self.model.fit()
         self._send_weights()
 
     # ---------------------------------------------------------------------- #

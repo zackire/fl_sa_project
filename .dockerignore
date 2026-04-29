@@ -32,6 +32,7 @@ certs/
 
 # ── Metrics results — mounted as volume, not baked into image ─────────────────
 metrics/results/
+
 metrics/logs/
 
 # ── Log files ─────────────────────────────────────────────────────────────────

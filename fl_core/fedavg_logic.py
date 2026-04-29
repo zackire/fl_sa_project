@@ -12,7 +12,7 @@ def aggregate(summed_weights: List[np.ndarray], num_survivors: int) -> List[np.n
     if not summed_weights or num_survivors <= 0:
         return []
         
-    logging.info(f"Computing FedAvg over {num_survivors} cryptographically summed client weights.")
+    logging.info(f"Computing FedAvg over {num_survivors} summed client weights.")
     
     # Divide the unmasked numpy array sum by the number of clients
     averaged_weights = [

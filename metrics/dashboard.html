@@ -4,841 +4,889 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FL SecAgg Monitor - Live</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link
-    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap"
-    rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <title>FLSA — Secure Aggregation Overhead Analysis</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
     :root {
-      --bg: #0e0f11;
-      --bg2: #161719;
-      --bg3: #1e2023;
-      --border: rgba(255, 255, 255, 0.07);
-      --border2: rgba(255, 255, 255, 0.12);
-      --text: #e8e8e2;
-      --muted: #7a7a72;
-      --a-col: #4f9eff;
-      --b-col: #56c98a;
-      --c-col: #f5a623;
-      --base-col: #9b8afb;
-      --a-bg: rgba(79, 158, 255, 0.1);
-      --b-bg: rgba(86, 201, 138, 0.1);
-      --c-bg: rgba(245, 166, 35, 0.1);
-      --base-bg: rgba(155, 138, 251, 0.1);
+      /* ── Updated Light Mode Color Scheme ── */
+      --bg: #f7f6f2;
+      /* Light textured concrete/paper background */
+      --bg2: #f2f1ed;
+      /* Slightly darker, textured header-ribbon color */
+      --surface: #ffffff;
+      /* Clean white for primary panels */
+      --surface2: #f4f3f0;
+      /* Very slightly tinted light gray for special panels */
+      --border: rgba(0, 0, 0, 0.06);
+      /* Thin, light gray borders */
+      --border2: rgba(0, 0, 0, 0.1);
+      /* Slightly stronger light gray borders */
+      --text: #21201e;
+      /* Deep, professional near-black/gray */
+      --muted: #6b6860;
+      /* Medium gray for secondary text */
+      --faint: #9c9a95;
+      /* Light gray for labels and faint text */
+      --col-base: #888780;
+      /* Neutral mid-gray for grid/axes/legend */
+      --col-a: #5B9BD5;
+      /* Strong blue */
+      --col-b: #6aab2e;
+      /* Strong green */
+      --col-c: #d4714a;
+      /* Strong orange-red */
       --mono: 'IBM Plex Mono', monospace;
       --sans: 'IBM Plex Sans', sans-serif;
-      --radius: 8px;
-      --radius-lg: 12px;
-      --log-info:    #e8e8e2;
-      --log-warning: #f5a623;
-      --log-error:   #ff5f5f;
-      --log-debug:   #7a7a72;
-      --log-ts:      #5a87b8;
-      --log-bracket: #9b8afb;
+      --r: 6px;
+      --rl: 10px;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
+      font-family: var(--sans);
       background: var(--bg);
       color: var(--text);
-      font-family: var(--sans);
-      font-size: 14px;
+      font-size: 13px;
       line-height: 1.6;
-      min-height: 100vh;
+      padding: 32px 28px;
+      max-width: 1280px;
+      margin: 0 auto;
     }
 
-    /* ── Header ──────────────────────────────────────────────────────── */
-    .header {
+    .page-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border2);
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .page-header h1 {
+      font-family: var(--sans);
+      font-weight: 300;
+      font-size: 21px;
+      letter-spacing: -0.01em;
+    }
+
+    .page-header h1 span {
+      font-weight: 500;
+    }
+
+    .page-header p {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 3px;
+      font-family: var(--mono);
+    }
+
+    .legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .li {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .ls {
+      width: 14px;
+      height: 2px;
+      border-radius: 2px;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--rl);
+      padding: 18px 20px;
+      margin-bottom: 12px;
+    }
+
+    .slabel {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      color: var(--faint);
+      margin-bottom: 10px;
+    }
+
+    .cfg-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+      gap: 10px 16px;
+      margin-top: 10px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--muted);
+      margin-bottom: 3px;
+      letter-spacing: 0.04em;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 5px 8px;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: var(--r);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      outline: none;
+      transition: border-color .15s;
+    }
+
+    .field input:focus {
+      border-color: var(--col-a);
+    }
+
+    .wrow {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .wi {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .wi label {
+      color: var(--muted);
+    }
+
+    .wi input {
+      width: 62px;
+      padding: 5px 8px;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: var(--r);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      outline: none;
+    }
+
+    .wi input:focus {
+      border-color: var(--col-a);
+    }
+
+    .wsum {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .wsum b {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .upload-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .slot {
+      position: relative;
+      border: 1px dashed var(--border2);
+      border-radius: var(--r);
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      min-height: 62px;
+    }
+
+    .slot:hover {
+      border-color: var(--col-a);
+      background: rgba(91, 155, 213, 0.08);
+    }
+
+    .slot.loaded {
+      border-style: solid;
+      border-color: var(--col-b);
+      background: rgba(106, 171, 46, 0.1);
+    }
+
+    .slot .ss {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 500;
+      margin-bottom: 1px;
+    }
+
+    .slot .sn {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .slot .sf {
+      font-size: 10px;
+      margin-top: 3px;
+      color: var(--col-b);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 140px;
+    }
+
+    .slot input[type=file] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── KEY METRIC CARDS ── */
+    .kpi-section {
+      margin-bottom: 14px;
+    }
+
+    .kpi-row {
+      display: none;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--rl);
+      padding: 13px 15px;
+    }
+
+    .kpi .kl {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--faint);
+      margin-bottom: 5px;
+    }
+
+    .kpi .kv {
+      font-family: var(--mono);
+      font-size: 19px;
+      font-weight: 500;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .kpi .ks {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    .good {
+      color: #6aab2e !important;
+    }
+
+    .warn {
+      color: #c8922a !important;
+    }
+
+    .bad {
+      color: #d4714a !important;
+    }
+
+    .tabs {
+      display: flex;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--border2);
+    }
+
+    .tab {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      padding: 7px 16px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+
+    .tab:hover {
+      color: var(--text);
+    }
+
+    .tab.active {
+      color: var(--text);
+      border-bottom-color: var(--col-a);
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .cgrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .cc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--rl);
+      padding: 15px 17px;
+    }
+
+    .cc.wide {
+      grid-column: 1/-1;
+    }
+
+    .ct {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--faint);
+      margin-bottom: 11px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 18px 28px;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-      position: sticky;
-      top: 0;
-      z-index: 100;
     }
-    .header-left { display: flex; align-items: center; gap: 14px; }
-    .logo {
-      width: 28px; height: 28px;
-      border-radius: 6px;
-      background: linear-gradient(135deg, var(--a-col), var(--b-col));
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--mono); font-size: 11px; font-weight: 500; color: #fff;
+
+    .cc canvas {
+      max-height: 210px;
     }
-    .header h1 { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
-    .header-sub { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-left: 4px; }
-    .status-dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--b-col); box-shadow: 0 0 6px var(--b-col);
-      animation: pulse 2s infinite;
+
+    .cc.wide canvas {
+      max-height: 250px;
     }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-    .header-right {
-      display: flex; align-items: center; gap: 10px;
-      font-family: var(--mono); font-size: 11px; color: var(--b-col);
-    }
-    .upload-btn {
-      font-family: var(--mono); font-size: 10px;
-      padding: 4px 12px; border-radius: 4px;
-      border: 1px solid var(--border); background: var(--bg3); color: var(--text);
-      cursor: pointer; transition: all .15s; margin-right: 10px; display: inline-block;
-    }
-    .upload-btn:hover { border-color: var(--border2); }
 
-    /* ── Layout ──────────────────────────────────────────────────────── */
-    .layout {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 0;
-      min-height: calc(100vh - 57px);
-    }
-    .left-panel { overflow-y: auto; padding: 24px 28px; }
-    .left-panel::-webkit-scrollbar { width: 4px; }
-    .left-panel::-webkit-scrollbar-track { background: transparent; }
-    .left-panel::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-    /* ── Section titles ──────────────────────────────────────────────── */
-    .sec-title {
-      font-size: 10px; font-weight: 500; letter-spacing: .08em;
-      text-transform: uppercase; color: var(--muted);
-      margin-bottom: 12px; margin-top: 24px;
-    }
-    .sec-title:first-child { margin-top: 0; }
-
-    /* ── Mode tabs ───────────────────────────────────────────────────── */
-    .mode-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-    .mode-tab {
-      font-family: var(--mono); font-size: 11px;
-      padding: 5px 14px; border-radius: var(--radius);
-      border: 1px solid var(--border2); background: transparent;
-      color: var(--muted); cursor: pointer; transition: all .15s;
-    }
-    .mode-tab:hover { color: var(--text); }
-    .mode-tab.active-a    { background: var(--a-bg);    border-color: var(--a-col);    color: var(--a-col); }
-    .mode-tab.active-b    { background: var(--b-bg);    border-color: var(--b-col);    color: var(--b-col); }
-    .mode-tab.active-c    { background: var(--c-bg);    border-color: var(--c-col);    color: var(--c-col); }
-    .mode-tab.active-baseline { background: var(--base-bg); border-color: var(--base-col); color: var(--base-col); }
-
-    /* ── Metric cards ────────────────────────────────────────────────── */
-    .metric-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 6px; }
-    .mcard { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; }
-    .mcard-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
-    .mcard-val { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--text); }
-    .mcard-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
-    .mcard-explain { font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.5; border-top: 1px solid var(--border); padding-top: 6px; }
-    .val-warn    { color: var(--c-col); }
-    .val-ok      { color: var(--b-col); }
-    .val-neutral { color: var(--a-col); }
-
-    /* ── Comparison table ────────────────────────────────────────────── */
-    .comp-table-wrap { overflow-x: auto; margin-bottom: 4px; }
-    .comp-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
-    .comp-table th {
-      text-align: left; padding: 7px 10px;
-      font-family: var(--sans); font-size: 10px; font-weight: 500;
-      text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
-      border-bottom: 1px solid var(--border); white-space: nowrap;
-    }
-    .comp-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-    .comp-table tr:last-child td { border-bottom: none; }
-    .comp-table tr:hover td { background: var(--bg3); }
-
-    /* ── Badges ──────────────────────────────────────────────────────── */
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-family: var(--sans); font-weight: 500; }
-    .badge-a    { background: var(--a-bg);    color: var(--a-col);    border: 1px solid rgba(79,158,255,.25); }
-    .badge-b    { background: var(--b-bg);    color: var(--b-col);    border: 1px solid rgba(86,201,138,.25); }
-    .badge-c    { background: var(--c-bg);    color: var(--c-col);    border: 1px solid rgba(245,166,35,.25); }
-    .badge-base { background: var(--base-bg); color: var(--base-col); border: 1px solid rgba(155,138,251,.25); }
-
-    /* ── Chart ───────────────────────────────────────────────────────── */
-    .chart-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
-    .chart-tab {
-      font-family: var(--mono); font-size: 10px;
-      padding: 4px 12px; border-radius: 4px;
-      border: 1px solid var(--border); background: transparent;
-      color: var(--muted); cursor: pointer; transition: all .15s;
-    }
-    .chart-tab.active { background: var(--bg3); border-color: var(--border2); color: var(--text); }
-    .chart-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 4px; }
-    .chart-inner { position: relative; width: 100%; height: 220px; }
-    .chart-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
-    .chart-legend span { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
-    .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
-
-    /* ── Raw table ───────────────────────────────────────────────────── */
-    .raw-table-wrap { overflow-x: auto; }
-    .raw-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
-    .raw-table th { text-align: right; padding: 6px 10px; font-family: var(--sans); font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--border); }
-    .raw-table th:first-child { text-align: left; }
-    .raw-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; color: var(--muted); }
-    .raw-table td:first-child { text-align: left; color: var(--text); }
-    .raw-table tr:hover td { background: var(--bg3); }
-
-    /* ── Empty state ─────────────────────────────────────────────────── */
-    .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 13px; }
-    .empty-state .big { font-size: 32px; margin-bottom: 10px; color: var(--border2); font-family: var(--mono); }
-    .empty-state p { margin-bottom: 16px; line-height: 1.6; }
-
-    /* ── Misc helpers ────────────────────────────────────────────────── */
-    .divider { height: 1px; background: var(--border); margin: 22px 0; }
-    .f1-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
-    .f1-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-    .f1-item input { width: 64px; font-family: var(--mono); font-size: 12px; background: var(--bg3); border: 1px solid var(--border2); color: var(--text); padding: 4px 8px; border-radius: 4px; }
-    .f1-item .fname { font-weight: 500; color: var(--text); }
-
-    /* ── Log panel ───────────────────────────────────────────────────── */
-    .log-toolbar {
+    .ctrls {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
+      gap: 14px;
+      margin-bottom: 12px;
       flex-wrap: wrap;
     }
-    .log-toolbar input[type="text"] {
-      flex: 1;
-      min-width: 160px;
+
+    .ctrls label {
       font-family: var(--mono);
       font-size: 11px;
-      background: var(--bg3);
-      border: 1px solid var(--border2);
-      color: var(--text);
-      padding: 5px 10px;
-      border-radius: 4px;
-      outline: none;
+      color: var(--muted);
     }
-    .log-toolbar input[type="text"]:focus { border-color: var(--a-col); }
-    .log-toolbar label {
-      display: flex;
-      align-items: center;
-      gap: 5px;
+
+    .ctrls select {
+      padding: 5px 26px 5px 8px;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: var(--r);
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: 11px;
+      color: var(--text);
+      outline: none;
+      cursor: pointer;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5'%3E%3Cpath fill='%238c8880' d='M0 0l4.5 5L9 0z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+
+    .pills {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      border: 1px solid var(--border2);
+      border-radius: 20px;
+      padding: 3px 11px;
+      font-family: var(--mono);
+      font-size: 10.5px;
       color: var(--muted);
       cursor: pointer;
-      white-space: nowrap;
-    }
-    .log-toolbar label input[type="checkbox"] { accent-color: var(--b-col); }
-    .log-upload-btn {
-      font-family: var(--mono); font-size: 10px;
-      padding: 4px 10px; border-radius: 4px;
-      border: 1px solid var(--border); background: var(--bg3); color: var(--muted);
-      cursor: pointer; transition: all .15s; white-space: nowrap;
-    }
-    .log-upload-btn:hover { border-color: var(--border2); color: var(--text); }
-
-    .log-status {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--muted);
-      white-space: nowrap;
-    }
-
-    .log-box {
       background: var(--bg2);
+      transition: all .15s;
+    }
+
+    .pill.active {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+    }
+
+    .tw {
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 12px 14px;
-      height: 380px;
-      overflow-y: auto;
+      border-radius: var(--rl);
+      overflow: auto;
+      margin-bottom: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
       font-family: var(--mono);
       font-size: 11px;
-      line-height: 1.7;
-      color: var(--muted);
     }
-    .log-box::-webkit-scrollbar { width: 4px; }
-    .log-box::-webkit-scrollbar-track { background: transparent; }
-    .log-box::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-    /* individual log line */
-    .log-line { display: block; white-space: pre-wrap; word-break: break-all; padding: 1px 0; }
-    .log-line:hover { background: rgba(255,255,255,0.03); border-radius: 3px; }
+    thead th {
+      background: var(--bg2);
+      padding: 8px 13px;
+      text-align: left;
+      font-size: 9.5px;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--faint);
+      border-bottom: 1px solid var(--border2);
+      white-space: nowrap;
+      font-weight: 400;
+    }
 
-    /* colour by level */
-    .log-ts      { color: var(--log-ts); }
-    .log-bracket { color: var(--log-bracket); }
-    .log-info    { color: var(--log-info); }
-    .log-warning { color: var(--log-warning); }
-    .log-error   { color: var(--log-error); font-weight: 500; }
-    .log-debug   { color: var(--log-debug); }
-    .log-plain   { color: var(--muted); }
+    tbody td {
+      padding: 7px 13px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
 
-    /* highlight search match */
-    .log-match { background: rgba(245,166,35,0.25); border-radius: 2px; padding: 0 2px; color: var(--c-col); }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
 
-    .log-empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 12px; }
+    tbody tr:hover td {
+      background: var(--bg2);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+
+    .empty {
+      padding: 44px;
+      text-align: center;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .fnote {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--muted);
+      padding: 8px 12px;
+      border-left: 2px solid var(--border2);
+      margin-bottom: 12px;
+      line-height: 1.8;
+    }
+
+    .fnote b {
+      color: var(--text);
+      font-weight: 500;
+    }
   </style>
 </head>
 
 <body>
 
-  <div class="header">
-    <div class="header-left">
-      <div class="logo">FL</div>
-      <h1>SecAgg Monitor</h1>
-      <span class="header-sub">· Federated Learning · Secure Aggregation Benchmarks</span>
+  <header class="page-header">
+    <div>
+      <h1>FLSA — <span>Secure Aggregation</span> Overhead Analysis</h1>
+      <p>Federated Learning · Stack Comparison · CCIP / Raspberry Pi</p>
     </div>
-    <div class="header-right">
-      <label class="upload-btn">
-        Upload CSV
-        <input type="file" id="csvUpload" accept=".csv" style="display:none;">
-      </label>
-      <div class="status-dot" id="statusDot" style="background:#555;box-shadow:none;animation:none;"
-        title="Waiting for data..."></div>
-      <span id="syncStatus">Waiting for live data...</span>
+    <div class="legend">
+      <div class="li">
+        <div class="ls" style="background:var(--col-base)"></div>N · Baseline
+      </div>
+      <div class="li">
+        <div class="ls" style="background:var(--col-a)"></div>A · X25519 + ChaCha20 + ASCON
+      </div>
+      <div class="li">
+        <div class="ls" style="background:var(--col-b)"></div>B · X25519 + SIMON + ASCON
+      </div>
+      <div class="li">
+        <div class="ls" style="background:var(--col-c)"></div>C · X25519 + PRESENT + ChaChaPoly
+      </div>
+    </div>
+  </header>
+
+  <div class="panel">
+    <div class="slabel">Baseline (N) reference values</div>
+    <div class="cfg-grid">
+      <div class="field"><label>Latency (s)</label><input type="number" id="bl-l" value="5.5" step="0.001"
+          oninput="recalc()"></div>
+      <div class="field"><label>CPU (%)</label><input type="number" id="bl-c" value="0.8" step="0.01"
+          oninput="recalc()"></div>
+      <div class="field"><label>RAM (MB)</label><input type="number" id="bl-r" value="40" step="0.1" oninput="recalc()">
+      </div>
+      <div class="field"><label>Bandwidth (bytes)</label><input type="number" id="bl-b" value="1200" step="1"
+          oninput="recalc()"></div>
+      <div class="field"><label>F1 score (baseline)</label><input type="number" id="bl-f" value="0.850" step="0.001"
+          min="0" max="1" oninput="recalc()"></div>
+      <div class="field"><label>F1 score (secure)</label><input type="number" id="sec-f" value="0.850" step="0.001"
+          min="0" max="1" oninput="recalc()"></div>
     </div>
   </div>
 
-  <div class="layout">
-    <div class="left-panel" id="leftPanel">
-      <div class="empty-state" id="emptyState">
-        <div class="big">[ ]</div>
-        <p>Awaiting live measurements...<br>Looking for the latest CSV in the <code>results/</code> folder.</p>
+  <div class="panel" style="margin-bottom:16px">
+    <div class="slabel">Overhead weights — α + β + γ + δ must equal 1</div>
+    <div class="wrow">
+      <div class="wi"><label>α · Latency</label><input type="number" id="wa" value="0.4" step="0.05" min="0" max="1"
+          oninput="recalc()"></div>
+      <div class="wi"><label>β · CPU</label><input type="number" id="wb" value="0.3" step="0.05" min="0" max="1"
+          oninput="recalc()"></div>
+      <div class="wi"><label>γ · Bandwidth</label><input type="number" id="wg" value="0.2" step="0.05" min="0" max="1"
+          oninput="recalc()"></div>
+      <div class="wi"><label>δ · RAM</label><input type="number" id="wd" value="0.1" step="0.05" min="0" max="1"
+          oninput="recalc()"></div>
+      <div class="wsum">Σ = <b id="wsum">1.00</b></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px">
+    <div class="slabel">Upload measurement CSV files — server + 3 clients per stack</div>
+    <div class="upload-grid" id="ugrid"></div>
+  </div>
+
+  <div class="kpi-row" id="krow"></div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="swTab('overview',this)">Overview</button>
+    <button class="tab" onclick="swTab('compare',this)">Baseline comparison</button>
+    <button class="tab" onclick="swTab('rounds',this)">Per round</button>
+    <button class="tab" onclick="swTab('nodes',this)">By node</button>
+    <button class="tab" onclick="swTab('table',this)">Summary table</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-overview">
+    <div class="cgrid">
+      <div class="cc">
+        <div class="ct">Normalized overhead (O)</div><canvas id="c-O"></canvas>
       </div>
-
-      <div id="mainContent" style="display:none;">
-        <p class="sec-title">Modes detected</p>
-        <div class="mode-tabs" id="modeTabs"></div>
-
-        <p class="sec-title">Summary metrics <span
-            style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;">(averages, round 1 excluded
-            as warmup)</span></p>
-        <div class="metric-grid" id="metricGrid"></div>
-
-        <div class="divider"></div>
-
-        <p class="sec-title">Privacy-Efficiency Ratio — enter your F1 scores</p>
-        <div class="f1-row" id="f1Row"></div>
-        <div class="comp-table-wrap" style="margin-top:10px;">
-          <table class="comp-table" id="perTable">
-            <thead>
-              <tr>
-                <th>Mode</th>
-                <th>Algorithms</th>
-                <th>O (overhead)</th>
-                <th>F1 score</th>
-                <th>PER = F1 / O</th>
-                <th>Latency RAF</th>
-                <th>BW RAF</th>
-                <th>CPU RAF</th>
-                <th>RAM RAF</th>
-              </tr>
-            </thead>
-            <tbody id="perBody"></tbody>
-          </table>
-        </div>
-        <p style="font-size:11px;color:var(--muted);margin-top:8px;">
-          PER = F1 / O. Higher is better. O = 0.4·(L_ratio) + 0.2·(CPU_ratio) + 0.2·(RAM_ratio) + 0.2·(BW_ratio)
-          relative to baseline.
-        </p>
-
-        <div class="divider"></div>
-
-        <p class="sec-title">Round-by-round comparison</p>
-        <div class="chart-tabs" id="chartTabs">
-          <button class="chart-tab active" onclick="switchMetric('latency_s',this)">Latency</button>
-          <button class="chart-tab" onclick="switchMetric('cpu_avg_pct',this)">CPU</button>
-          <button class="chart-tab" onclick="switchMetric('ram_avg_mb',this)">RAM</button>
-          <button class="chart-tab" onclick="switchMetric('bandwidth_bytes',this)">Bandwidth</button>
-        </div>
-        <div class="chart-wrap">
-          <div class="chart-legend" id="chartLegend"></div>
-          <div class="chart-inner"><canvas id="mainChart" role="img"></canvas></div>
-        </div>
-
-        <div class="divider"></div>
-
-        <p class="sec-title">Raw measurements</p>
-        <div class="raw-table-wrap">
-          <table class="raw-table" id="rawTable">
-            <thead>
-              <tr>
-                <th>Mode</th><th>Round</th><th>Timestamp</th>
-                <th>Latency (s)</th><th>CPU (%)</th><th>RAM (MB)</th><th>BW (bytes)</th>
-              </tr>
-            </thead>
-            <tbody id="rawBody"></tbody>
-          </table>
-        </div>
+      <div class="cc">
+        <div class="ct">Privacy-efficiency ratio (PER ↑ better)</div><canvas id="c-PER"></canvas>
       </div>
-
-      <!-- ── SESSION LOGS PANEL ─────────────────────────────────────── -->
-      <div class="divider"></div>
-      <p class="sec-title" id="logSectionTitle">Session Logs
-        <span style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;" id="logFileLabel"></span>
-      </p>
-
-      <div class="log-toolbar">
-        <input type="text" id="logFilter" placeholder="Filter by keyword…" oninput="renderLogs()">
-        <label><input type="checkbox" id="logAutoScroll" checked> Auto-scroll</label>
-        <label><input type="checkbox" id="logShowInfo"    checked> INFO</label>
-        <label><input type="checkbox" id="logShowWarning" checked> WARNING</label>
-        <label><input type="checkbox" id="logShowError"   checked> ERROR</label>
-        <label class="log-upload-btn">
-          Upload log
-          <input type="file" id="logUpload" accept=".log,.txt" style="display:none;">
-        </label>
-        <span class="log-status" id="logStatus">Fetching…</span>
+      <div class="cc">
+        <div class="ct">RAF · Latency</div><canvas id="c-RL"></canvas>
       </div>
-
-      <div class="log-box" id="logBox">
-        <div class="log-empty">Connecting to server log…</div>
+      <div class="cc">
+        <div class="ct">RAF · CPU</div><canvas id="c-RC"></canvas>
       </div>
+      <div class="cc">
+        <div class="ct">RAF · Bandwidth</div><canvas id="c-RB"></canvas>
+      </div>
+      <div class="cc">
+        <div class="ct">Average RAM usage by node (MB)</div><canvas id="c-RAM"></canvas>
+      </div>
+    </div>
+  </div>
 
-    </div><!-- /left-panel -->
-  </div><!-- /layout -->
+  <div class="tab-panel" id="tab-compare">
+    <div class="ctrls">
+      <label>Stack</label>
+      <select id="cs" onchange="renderCmp()">
+        <option value="a">Stack A · X25519 + ChaCha20 + ASCON</option>
+        <option value="b">Stack B · X25519 + SIMON + ASCON</option>
+        <option value="c">Stack C · X25519 + PRESENT + ChaChaPoly</option>
+      </select>
+      <label>Node</label>
+      <select id="cn" onchange="renderCmp()">
+        <option value="server">Server</option>
+        <option value="client1">Client 1</option>
+        <option value="client2">Client 2</option>
+        <option value="client3">Client 3</option>
+      </select>
+      <div class="pills" id="mpills">
+        <button class="pill active" data-m="latency_s" onclick="togglePill(this)">Latency</button>
+        <button class="pill" data-m="cpu_avg_pct" onclick="togglePill(this)">CPU</button>
+        <button class="pill" data-m="ram_avg_mb" onclick="togglePill(this)">RAM</button>
+        <button class="pill" data-m="bandwidth_bytes" onclick="togglePill(this)">Bandwidth</button>
+      </div>
+    </div>
+    <div class="cgrid">
+      <div class="cc wide">
+        <div class="ct"><span id="cmp-title">Selected stack vs baseline · per round</span></div>
+        <canvas id="c-cmp1" style="max-height:260px"></canvas>
+      </div>
+      <div class="cc wide">
+        <div class="ct">All stacks vs baseline · selected metric · selected node</div>
+        <canvas id="c-cmp2" style="max-height:240px"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-rounds">
+    <div class="cgrid">
+      <div class="cc wide">
+        <div class="ct">Latency per round (s) · server</div><canvas id="c-LR"></canvas>
+      </div>
+      <div class="cc wide">
+        <div class="ct">CPU per round (%) · server</div><canvas id="c-CR"></canvas>
+      </div>
+      <div class="cc wide">
+        <div class="ct">Bandwidth per round (bytes) · server</div><canvas id="c-BR"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-nodes">
+    <div class="cgrid">
+      <div class="cc">
+        <div class="ct">Average latency by node (s)</div><canvas id="c-NL"></canvas>
+      </div>
+      <div class="cc">
+        <div class="ct">Average CPU by node (%)</div><canvas id="c-NC"></canvas>
+      </div>
+      <div class="cc">
+        <div class="ct">Average bandwidth by node (bytes)</div><canvas id="c-NB"></canvas>
+      </div>
+      <div class="cc">
+        <div class="ct">Average RAM by node (MB)</div><canvas id="c-NR"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-table">
+    <div class="fnote">
+      <b>O</b> = α·(L_sec / L_base) + β·(CPU_sec / CPU_base) + γ·(BW_sec / BW_base) + δ·(RAM_sec / RAM_base)
+      &nbsp;·&nbsp;
+      <b>RAF</b> = metric_sec / metric_base &nbsp;·&nbsp;
+      <b>PER</b> = F1_sec / O
+    </div>
+    <div class="tw">
+      <table>
+        <thead>
+          <tr>
+            <th>Stack</th>
+            <th>Node</th>
+            <th>Avg Latency (s)</th>
+            <th>Avg CPU (%)</th>
+            <th>Avg RAM (MB)</th>
+            <th>Avg BW (bytes)</th>
+            <th>RAF-L</th>
+            <th>RAF-CPU</th>
+            <th>RAF-BW</th>
+            <th>RAF-RAM</th>
+            <th>O</th>
+            <th>PER</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr>
+            <td colspan="12" class="empty">Upload CSV files to populate this table</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
   <script>
-    /* ================================================================
-       METRICS SECTION
-    ================================================================ */
-    const MODES = {
-      stack_a:  { label:'Stack A',   algos:'X25519 + ChaCha20 + Ascon-128',   col:'#4f9eff', bg:'var(--a-bg)',    badge:'badge-a',    tabClass:'active-a'    },
-      stack_b:  { label:'Stack B',   algos:'X25519 + SIMON + Ascon-128',       col:'#56c98a', bg:'var(--b-bg)',    badge:'badge-b',    tabClass:'active-b'    },
-      stack_c:  { label:'Stack C',   algos:'X25519 + PRESENT + ChaChaPoly',    col:'#f5a623', bg:'var(--c-bg)',    badge:'badge-c',    tabClass:'active-c'    },
-      baseline: { label:'Baseline',  algos:'No secure aggregation',             col:'#9b8afb', bg:'var(--base-bg)', badge:'badge-base', tabClass:'active-baseline' },
-    };
-    const METRIC_INFO = {
-      latency_s:       { label:'Avg Latency', unit:'s',   precision:4 },
-      cpu_avg_pct:     { label:'Avg CPU',     unit:'%',   precision:1 },
-      ram_avg_mb:      { label:'Avg RAM',     unit:' MB', precision:1 },
-      bandwidth_bytes: { label:'Avg BW',      unit:' B',  precision:0 },
-    };
-    const WEIGHTS = { latency_s:0.4, cpu_avg_pct:0.2, ram_avg_mb:0.2, bandwidth_bytes:0.2 };
-
-    let allData       = [];
-    let currentMetric = 'latency_s';
-    let chartInst     = null;
-    let isLive        = true;
-    let f1Values      = { stack_a:0.90, stack_b:0.90, stack_c:0.90, baseline:0.87 };
-
-    function parseCSV(text) {
-      const lines = text.trim().split('\n');
-      if (lines.length < 2) return [];
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/ /g,'_'));
-      return lines.slice(1).filter(l => l.trim()).map(line => {
-        const vals = line.split(',').map(v => v.trim());
-        const obj  = {};
-        headers.forEach((h,i) => { obj[h] = isNaN(vals[i]) ? vals[i] : parseFloat(vals[i]); });
-        return obj;
-      });
-    }
-
-    function avg(arr, key, skipRound1=true) {
-      const filtered = skipRound1 ? arr.filter(r => r.round_num>1) : arr;
-      if (!filtered.length) return 0;
-      return filtered.reduce((s,r) => s+(r[key]||0), 0) / filtered.length;
-    }
-
-    function fmt(val, precision) { return precision===0 ? Math.round(val) : val.toFixed(precision); }
-
-    function render() {
-      if (!allData.length) return;
-      const modes  = [...new Set(allData.map(r => r.mode))].filter(m => MODES[m]);
-      const byMode = {};
-      modes.forEach(m => { byMode[m] = allData.filter(r => r.mode===m); });
-
-      const baseMode = modes.includes('baseline') ? 'baseline' : modes[0];
-      const baseAvgs = {};
-      Object.keys(METRIC_INFO).forEach(k => { baseAvgs[k] = avg(byMode[baseMode], k) || 1; });
-
-      document.getElementById('emptyState').style.display   = 'none';
-      document.getElementById('mainContent').style.display  = 'block';
-
-      const tabsEl = document.getElementById('modeTabs');
-      tabsEl.innerHTML = '';
-      modes.forEach(m => {
-        const btn = document.createElement('button');
-        btn.className   = `mode-tab ${MODES[m].tabClass}`;
-        btn.textContent = `${MODES[m].label} — ${MODES[m].algos}`;
-        tabsEl.appendChild(btn);
-      });
-
-      const grid = document.getElementById('metricGrid');
-      grid.innerHTML = '';
-      grid.style.gridTemplateColumns = `repeat(${Math.min(modes.length,4)}, 1fr)`;
-      modes.forEach(m => {
-        const latAvg = avg(byMode[m], 'latency_s');
-        const bwAvg  = avg(byMode[m], 'bandwidth_bytes');
-        const minfo  = MODES[m];
-        const raf    = latAvg / baseAvgs['latency_s'];
-        const rafClass = raf>3 ? 'val-warn' : raf>1.5 ? 'val-neutral' : 'val-ok';
-        const card = document.createElement('div');
-        card.className = 'mcard';
-        card.innerHTML = `
-          <div class="mcard-label"><span class="badge ${minfo.badge}">${minfo.label}</span></div>
-          <div class="mcard-val ${rafClass}">${latAvg.toFixed(2)}s</div>
-          <div class="mcard-sub">avg latency · RAF <span class="${rafClass}">${raf.toFixed(2)}×</span></div>
-          <div class="mcard-explain">${minfo.algos}<br>BW avg: ${Math.round(bwAvg)} B/round</div>`;
-        grid.appendChild(card);
-      });
-
-      const f1Row = document.getElementById('f1Row');
-      if (f1Row.children.length === 0) {
-        modes.forEach(m => {
-          const item = document.createElement('div');
-          item.className = 'f1-item';
-          item.innerHTML = `<span class="badge ${MODES[m].badge} fname">${MODES[m].label}</span> F1 <input type="number" min="0" max="1" step="0.01" value="${f1Values[m]??0.90}" data-mode="${m}">`;
-          f1Row.appendChild(item);
-          item.querySelector('input').addEventListener('input', e => {
-            f1Values[m] = parseFloat(e.target.value) || 0;
-            renderPER(modes, byMode, baseAvgs);
-          });
-        });
-      }
-      renderPER(modes, byMode, baseAvgs);
-      renderChart(modes, byMode);
-
-      const rawBody = document.getElementById('rawBody');
-      rawBody.innerHTML = '';
-      [...allData].reverse().forEach(r => {
-        const minfo = MODES[r.mode] || {};
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><span class="badge ${minfo.badge||''}">${minfo.label||r.mode}</span></td>
-          <td>${r.round_num}</td>
-          <td style="color:var(--muted)">${r.timestamp||''}</td>
-          <td>${(r.latency_s||0).toFixed(4)}</td>
-          <td>${(r.cpu_avg_pct||0).toFixed(1)}</td>
-          <td>${(r.ram_avg_mb||0).toFixed(1)}</td>
-          <td>${Math.round(r.bandwidth_bytes||0)}</td>`;
-        rawBody.appendChild(tr);
-      });
-    }
-
-    function computeO(modeAvgs, baseAvgs) {
-      let o = 0;
-      Object.keys(WEIGHTS).forEach(k => {
-        const ratio = baseAvgs[k]>0 ? (modeAvgs[k]||0)/baseAvgs[k] : 1;
-        o += WEIGHTS[k]*ratio;
-      });
-      return o;
-    }
-
-    function renderPER(modes, byMode, baseAvgs) {
-      const tbody = document.getElementById('perBody');
-      tbody.innerHTML = '';
-      modes.forEach(m => {
-        const mAvgs = {};
-        Object.keys(METRIC_INFO).forEach(k => { mAvgs[k] = avg(byMode[m], k); });
-        const O   = computeO(mAvgs, baseAvgs);
-        const f1  = f1Values[m] ?? 0.90;
-        const per = f1 / O;
-        const minfo = MODES[m];
-        const rafs  = Object.keys(METRIC_INFO).map(k => baseAvgs[k]>0 ? (mAvgs[k]/baseAvgs[k]) : 1);
-        const perClass = per>0.7 ? 'val-ok' : per>0.4 ? 'val-neutral' : 'val-warn';
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><span class="badge ${minfo.badge}">${minfo.label}</span></td>
-          <td style="color:var(--muted);font-size:10px;">${minfo.algos}</td>
-          <td>${O.toFixed(3)}</td>
-          <td>${f1.toFixed(2)}</td>
-          <td class="${perClass}" style="font-weight:500;">${per.toFixed(3)}</td>
-          <td>${rafs[0].toFixed(2)}×</td>
-          <td>${rafs[3].toFixed(2)}×</td>
-          <td>${rafs[1].toFixed(2)}×</td>
-          <td>${rafs[2].toFixed(2)}×</td>`;
-        tbody.appendChild(tr);
-      });
-    }
-
-    function renderChart(modes, byMode) {
-      const k     = currentMetric;
-      const minfo = METRIC_INFO[k];
-      const maxRound = Math.max(...allData.map(r => r.round_num));
-      const labels   = Array.from({length:maxRound}, (_,i) => 'R'+(i+1));
-
-      const datasets = modes.map(m => ({
-        label: MODES[m].label,
-        data: Array.from({length:maxRound}, (_,i) => {
-          const row = byMode[m].find(r => r.round_num===i+1);
-          return row ? row[k] : null;
-        }),
-        borderColor: MODES[m].col,
-        backgroundColor: 'transparent',
-        pointBackgroundColor: MODES[m].col,
-        pointRadius: 4, tension: 0.3, spanGaps: true,
-      }));
-
-      const legendEl = document.getElementById('chartLegend');
-      legendEl.innerHTML = modes.map(m =>
-        `<span><span class="legend-dot" style="background:${MODES[m].col};"></span>${MODES[m].label}</span>`
-      ).join('');
-
-      if (chartInst) chartInst.destroy();
-      chartInst = new Chart(document.getElementById('mainChart'), {
-        type: 'line',
-        data: { labels, datasets },
-        options: {
-          animation: false,
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: ctx => ctx.dataset.label+': '+(ctx.parsed.y??'--')+minfo.unit } } },
-          scales: {
-            x: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#7a7a72', font:{family:'IBM Plex Mono',size:10}} },
-            y: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#7a7a72', font:{family:'IBM Plex Mono',size:10}, callback:v => fmt(v,minfo.precision)+minfo.unit}, title:{display:true, text:minfo.label, color:'#7a7a72', font:{family:'IBM Plex Sans',size:10}} }
-          }
-        }
-      });
-    }
-
-    function switchMetric(key, btn) {
-      currentMetric = key;
-      document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
-      btn.classList.add('active');
-      render();
-    }
-
-    // --- CSV upload ---
-    document.getElementById('csvUpload').addEventListener('change', e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      isLive = false;
-      const reader = new FileReader();
-      reader.onload = ev => {
-        allData = parseCSV(ev.target.result);
-        render();
-        document.getElementById('statusDot').style.cssText = 'background:#4f9eff;box-shadow:none;animation:none;';
-        document.getElementById('syncStatus').innerText      = `Viewing: ${file.name}`;
-        document.getElementById('syncStatus').style.color   = '#4f9eff';
-      };
-      reader.readAsText(file);
-    });
-
-    // --- Live CSV fetch ---
-    async function fetchLiveData() {
-      if (!isLive) return;
-      try {
-        const dirRes = await fetch('results/');
-        if (!dirRes.ok) throw new Error('Cannot access results/ folder');
-        const dirText = await dirRes.text();
-
-        const parser = new DOMParser();
-        const doc    = parser.parseFromString(dirText, 'text/html');
-        const links  = Array.from(doc.querySelectorAll('a'))
-          .map(a => a.getAttribute('href'))
-          .filter(href => href && href.endsWith('.csv'));
-
-        if (links.length === 0) throw new Error('No CSV files found in results/');
-
-        links.sort((a,b) => {
-          const mA = a.match(/_(\d{8}_\d{6})\.csv$/), mB = b.match(/_(\d{8}_\d{6})\.csv$/);
-          return (mA?mA[1]:'').localeCompare(mB?mB[1]:'');
-        });
-
-        const latestCsvName = links[links.length-1];
-        const csvRes = await fetch(`results/${latestCsvName}`);
-        if (csvRes.ok) {
-          const text    = await csvRes.text();
-          const newData = parseCSV(text);
-          if (newData.length !== allData.length || latestCsvName !== window._lastFetchedFile) {
-            allData = newData;
-            window._lastFetchedFile = latestCsvName;
-            render();
-          }
-          document.getElementById('statusDot').style.cssText = 'background:#56c98a;box-shadow:0 0 6px #56c98a;animation:pulse 2s infinite;';
-          const shortName = latestCsvName.replace('metrics_','').replace('.csv','');
-          document.getElementById('syncStatus').innerText    = `Live: ${shortName}`;
-          document.getElementById('syncStatus').style.color = '#56c98a';
-        }
-      } catch (err) {
-        document.getElementById('statusDot').style.cssText = 'background:#f5a623;box-shadow:none;animation:none;';
-        document.getElementById('syncStatus').innerText    = 'No CSV in results/';
-        document.getElementById('syncStatus').style.color = '#f5a623';
-      }
-    }
-
-    setInterval(fetchLiveData, 2000);
-    fetchLiveData();
-
-    /* ================================================================
-       SESSION LOGS SECTION
-       Polls ../logs/server.log every 3 s.
-       Falls back gracefully if the file is not yet available.
-    ================================================================ */
-
-    // Log file path relative to this page (served from metrics/)
-    const LOG_PATHS = [
-      'logs/server.log',
-      'logs/client1.log',
-      'logs/client2.log',
-      'logs/client3.log',
+    const STACKS = [
+      { id: 'a', label: 'Stack A', hex: '#185FA5', bg: '#E6F1FB', desc: 'X25519·ChaCha20·ASCON' },
+      { id: 'b', label: 'Stack B', hex: '#3B6D11', bg: '#EAF3DE', desc: 'X25519·SIMON·ASCON' },
+      { id: 'c', label: 'Stack C', hex: '#993C1D', bg: '#FAECE7', desc: 'X25519·PRESENT·ChaChaPoly' },
     ];
-    let currentLogPath  = LOG_PATHS[0];
-    let allLogLines     = [];   // raw string lines
-    let isLiveLogs      = true;
-    let lastLogContent  = '';
+    const NODES = ['server', 'client1', 'client2', 'client3'];
+    const NL = { server: 'Server', client1: 'Client 1', client2: 'Client 2', client3: 'Client 3' };
+    const ML = { latency_s: 'Latency (s)', cpu_avg_pct: 'CPU (%)', ram_avg_mb: 'RAM (MB)', bandwidth_bytes: 'Bandwidth (bytes)' };
 
-    // Build a tiny tab row for the log sources
-    (function buildLogTabs() {
-      const sectionTitle = document.getElementById('logSectionTitle');
-      const tabBar = document.createElement('div');
-      tabBar.style.cssText = 'display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
+    const store = { a: {}, b: {}, c: {} };
+    const charts = {};
+    let activePill = 'latency_s';
+    let res = {};
 
-      LOG_PATHS.forEach((path, idx) => {
-        const name = path.split('/').pop().replace('.log','');
-        const btn  = document.createElement('button');
-        btn.className   = 'chart-tab' + (idx===0 ? ' active' : '');
-        btn.textContent = name;
-        btn.id          = `logtab_${idx}`;
-        btn.onclick = () => {
-          isLiveLogs     = true;
-          currentLogPath = path;
-          allLogLines    = [];
-          lastLogContent = '';
-          document.querySelectorAll('[id^=logtab_]').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          document.getElementById('logStatus').textContent = 'Fetching…';
-          document.getElementById('logBox').innerHTML = '<div class="log-empty">Loading…</div>';
-          fetchLiveLogs();
-        };
-        tabBar.appendChild(btn);
-      });
+    function parseCSV(t) {
+      const ls = t.trim().split(/\r?\n/), h = ls[0].split(',').map(x => x.trim());
+      return ls.slice(1).map(l => { const v = l.split(','), o = {}; h.forEach((k, i) => o[k] = isNaN(v[i]) ? v[i] : parseFloat(v[i])); return o; }).filter(r => r.round_num != null);
+    }
+    function avg(a, k) { if (!a || !a.length) return null; const v = a.map(r => r[k]).filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }
+    function bl() { return { l: +document.getElementById('bl-l').value || 5.5, c: +document.getElementById('bl-c').value || 0.8, r: +document.getElementById('bl-r').value || 40, b: +document.getElementById('bl-b').value || 1200, f: +document.getElementById('bl-f').value || 0.85 }; }
+    function wt() {
+      const a = +document.getElementById('wa').value || 0, b = +document.getElementById('wb').value || 0, g = +document.getElementById('wg').value || 0, d = +document.getElementById('wd').value || 0;
+      document.getElementById('wsum').textContent = (a + b + g + d).toFixed(2);
+      return { a, b, g, d };
+    }
+    function sf1() { return +document.getElementById('sec-f').value || 0.85; }
 
-      // Insert tab bar before the toolbar
-      const toolbar = document.querySelector('.log-toolbar');
-      toolbar.parentNode.insertBefore(tabBar, toolbar);
-    })();
-
-    /* Colourises a single raw log line into an HTML <span> */
-    function colourLine(raw, filterText) {
-      // Detect level
-      let levelClass = 'log-plain';
-      if (/- INFO -/.test(raw))    levelClass = 'log-info';
-      if (/- WARNING -/.test(raw)) levelClass = 'log-warning';
-      if (/- ERROR -/.test(raw))   levelClass = 'log-error';
-      if (/- DEBUG -/.test(raw))   levelClass = 'log-debug';
-
-      // Escape HTML
-      let escaped = raw
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-      // Colourize timestamp prefix  "2026-04-25 11:15:22,152"
-      escaped = escaped.replace(
-        /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+)/,
-        '<span class="log-ts">$1</span>'
-      );
-      // Colourize [bracketed] tokens
-      escaped = escaped.replace(
-        /(\[[^\]]+\])/g,
-        '<span class="log-bracket">$1</span>'
-      );
-
-      // Highlight filter match
-      if (filterText) {
-        const esc = filterText.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-        escaped = escaped.replace(
-          new RegExp(`(${esc})`, 'gi'),
-          '<span class="log-match">$1</span>'
-        );
-      }
-
-      return `<span class="log-line ${levelClass}">${escaped}</span>`;
+    function computeStack(sid) {
+      const b = bl(), w = wt(), f1 = sf1();
+      const ns = NODES.map(n => ({ node: n, rows: store[sid][n] || [], latency: avg(store[sid][n] || [], 'latency_s'), cpu: avg(store[sid][n] || [], 'cpu_avg_pct'), ram: avg(store[sid][n] || [], 'ram_avg_mb'), bw: avg(store[sid][n] || [], 'bandwidth_bytes') }));
+      const srv = ns.find(x => x.node === 'server');
+      if (!srv || srv.latency == null) return null;
+      const rl = srv.latency / b.l, rc = srv.cpu / b.c, rb = srv.bw / b.b, rr = srv.ram / b.r;
+      const O = w.a * rl + w.b * rc + w.g * rb + w.d * rr;
+      return { ns, rl, rc, rb, rr, O, PER: f1 / O, srv };
     }
 
-    function shouldShowLine(raw) {
-      const showInfo    = document.getElementById('logShowInfo').checked;
-      const showWarning = document.getElementById('logShowWarning').checked;
-      const showError   = document.getElementById('logShowError').checked;
-      const filter      = document.getElementById('logFilter').value.trim().toLowerCase();
-
-      // Level filter
-      if (!showInfo    && /- INFO -/.test(raw))    return false;
-      if (!showWarning && /- WARNING -/.test(raw)) return false;
-      if (!showError   && /- ERROR -/.test(raw))   return false;
-
-      // Keyword filter
-      if (filter && !raw.toLowerCase().includes(filter)) return false;
-      return true;
-    }
-
-    function renderLogs() {
-      const box        = document.getElementById('logBox');
-      const filterText = document.getElementById('logFilter').value.trim();
-
-      if (!allLogLines.length) {
-        box.innerHTML = '<div class="log-empty">No log lines loaded yet.</div>';
-        return;
-      }
-
-      const filtered = allLogLines.filter(shouldShowLine);
-      if (!filtered.length) {
-        box.innerHTML = '<div class="log-empty">No lines match the current filter.</div>';
-        return;
-      }
-
-      box.innerHTML = filtered.map(line => colourLine(line, filterText)).join('\n');
-
-      if (document.getElementById('logAutoScroll').checked) {
-        box.scrollTop = box.scrollHeight;
+    function buildGrid() {
+      const g = document.getElementById('ugrid'); g.innerHTML = '';
+      for (const s of STACKS) for (const n of NODES) {
+        const d = document.createElement('div'); d.className = 'slot'; d.id = `sl-${s.id}-${n}`;
+        d.innerHTML = `<div class="ss" style="color:${s.hex}">${s.label}</div><div class="sn">${NL[n]}</div><div class="sf" id="sf-${s.id}-${n}">Click to upload</div><input type="file" accept=".csv" data-s="${s.id}" data-n="${n}" onchange="onFile(this)">`;
+        g.appendChild(d);
       }
     }
 
-    async function fetchLiveLogs() {
-      if (!isLiveLogs) return;
-      try {
-        // Use cache-busting query param so the browser doesn't cache the file
-        const res = await fetch(`${currentLogPath}?_=${Date.now()}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    function onFile(inp) {
+      const { s, n } = inp.dataset, file = inp.files[0]; if (!file) return;
+      const r = new FileReader(); r.onload = e => { store[s][n] = parseCSV(e.target.result); document.getElementById(`sf-${s}-${n}`).textContent = file.name; document.getElementById(`sl-${s}-${n}`).classList.add('loaded'); recalc(); }; r.readAsText(file);
+    }
 
-        const text = await res.text();
-        if (text !== lastLogContent) {
-          lastLogContent = text;
-          // Split by newline, keep non-empty lines
-          allLogLines = text.split('\n').filter(l => l.length > 0);
-          renderLogs();
-        }
+    const CB = { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9c9a95', font: { family: "'IBM Plex Mono',monospace", size: 10 } }, grid: { color: 'rgba(0,0,0,0.05)' } }, y: { ticks: { color: '#9c9a95', font: { family: "'IBM Plex Mono',monospace", size: 10 } }, grid: { color: 'rgba(0,0,0,0.05)' } } } };
+    const LEG = { display: true, labels: { color: '#6b6860', font: { family: "'IBM Plex Mono',monospace", size: 10 }, boxWidth: 14, boxHeight: 2 } };
 
-        const lineCount = allLogLines.length;
-        document.getElementById('logStatus').textContent =
-          `${lineCount} lines · live`;
-        document.getElementById('logStatus').style.color = '#56c98a';
+    function mk(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } return document.getElementById(id); }
+    function bar(id, labels, datasets, showLeg = false) { const ctx = mk(id); if (!ctx) return; charts[id] = new Chart(ctx, { type: 'bar', data: { labels, datasets }, options: { ...CB, plugins: { legend: showLeg ? LEG : { display: false } } } }); }
+    function ln(id, labels, datasets) { const ctx = mk(id); if (!ctx) return; charts[id] = new Chart(ctx, { type: 'line', data: { labels, datasets }, options: { ...CB, plugins: { legend: LEG } } }); }
 
-        // Update label in section title
-        document.getElementById('logFileLabel').textContent =
-          `· ${currentLogPath.split('/').pop()}`;
+    function recalc() {
+      wt(); res = {};
+      for (const s of STACKS) { const r = computeStack(s.id); if (r) res[s.id] = r; }
+      const has = Object.keys(res).length > 0;
+      document.getElementById('krow').style.display = has ? 'grid' : 'none';
+      if (has) renderKPIs();
+      renderOv(); renderRounds(); renderNodes(); renderTable(); renderCmp();
+    }
 
-      } catch (err) {
-        document.getElementById('logStatus').textContent = `Unavailable: ${err.message}`;
-        document.getElementById('logStatus').style.color = '#f5a623';
+    function renderKPIs() {
+      const best = Object.entries(res).reduce((b, [id, r]) => r.PER > (res[b]?.PER ?? -Infinity) ? id : b, Object.keys(res)[0]);
+      document.getElementById('krow').innerHTML = Object.entries(res).flatMap(([id, r]) => {
+        const s = STACKS.find(x => x.id === id);
+        const oc = r.O > 1.5 ? 'bad' : r.O > 1.1 ? 'warn' : 'good';
+        return [
+          `<div class="kpi"><div class="kl" style="color:${s.hex}">${s.label} · O</div><div class="kv ${oc}">${r.O.toFixed(3)}</div><div class="ks">Norm. overhead</div></div>`,
+          `<div class="kpi"><div class="kl" style="color:${s.hex}">${s.label} · PER</div><div class="kv ${id === best ? 'good' : ''}">${r.PER.toFixed(3)}</div><div class="ks">${id === best ? 'Best PER ★' : 'Priv.-eff. ratio'}</div></div>`,
+          `<div class="kpi"><div class="kl" style="color:${s.hex}">${s.label} · RAF-L</div><div class="kv">${r.rl.toFixed(2)}×</div><div class="ks">Latency amp.</div></div>`,
+        ];
+      }).join('');
+    }
 
-        if (!allLogLines.length) {
-          document.getElementById('logBox').innerHTML =
-            `<div class="log-empty">Cannot fetch log file.<br><code>${currentLogPath}</code><br><br>` +
-            `Make sure the HTTP server has access to the <code>logs/</code> directory<br>` +
-            `Or upload a log file manually using the button above.</div>`;
+    function renderOv() {
+      const ss = STACKS.filter(s => res[s.id]); if (!ss.length) return;
+      const labs = ss.map(s => s.label);
+      const dset = (data) => [{ data, backgroundColor: ss.map(s => s.hex + '22'), borderColor: ss.map(s => s.hex), borderWidth: 1.5, borderRadius: 3 }];
+      bar('c-O', labs, dset(ss.map(s => +res[s.id].O.toFixed(4))));
+      bar('c-PER', labs, dset(ss.map(s => +res[s.id].PER.toFixed(4))));
+      bar('c-RL', labs, dset(ss.map(s => +res[s.id].rl.toFixed(4))));
+      bar('c-RC', labs, dset(ss.map(s => +res[s.id].rc.toFixed(4))));
+      bar('c-RB', labs, dset(ss.map(s => +res[s.id].rb.toFixed(4))));
+      const nls = NODES.map(n => NL[n]);
+      const ramDS = ss.map(s => ({ label: s.label, data: NODES.map(n => { const v = res[s.id].ns.find(x => x.node === n)?.ram; return v != null ? +v.toFixed(2) : null; }), backgroundColor: s.hex + '33', borderColor: s.hex, borderWidth: 1.5, borderRadius: 3 }));
+      bar('c-RAM', nls, ramDS, true);
+    }
+
+    function renderRounds() {
+      const ss = STACKS.filter(s => res[s.id] && store[s.id].server?.length); if (!ss.length) return;
+      const maxR = Math.max(...ss.map(s => store[s.id].server.length));
+      const rls = Array.from({ length: maxR }, (_, i) => `R${i + 1}`);
+      const mkL = k => ss.map(s => ({ label: s.label, data: store[s.id].server.map(r => r[k] != null ? +r[k].toFixed(4) : null), borderColor: s.hex, backgroundColor: s.hex + '15', borderWidth: 1.5, tension: 0.3, pointRadius: 2.5, pointHoverRadius: 4, fill: false }));
+      ln('c-LR', rls, mkL('latency_s')); ln('c-CR', rls, mkL('cpu_avg_pct')); ln('c-BR', rls, mkL('bandwidth_bytes'));
+    }
+
+    function renderNodes() {
+      const ss = STACKS.filter(s => res[s.id]); if (!ss.length) return;
+      const nls = NODES.map(n => NL[n]);
+      const mkG = k => ss.map(s => ({ label: s.label, data: NODES.map(n => { const v = res[s.id].ns.find(x => x.node === n)?.[k]; return v != null ? +v.toFixed(3) : null; }), backgroundColor: s.hex + '33', borderColor: s.hex, borderWidth: 1.5, borderRadius: 3 }));
+      bar('c-NL', nls, mkG('latency'), true); bar('c-NC', nls, mkG('cpu'), true); bar('c-NB', nls, mkG('bw'), true); bar('c-NR', nls, mkG('ram'), true);
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('tbody');
+      if (!Object.keys(res).length) { tbody.innerHTML = '<tr><td colspan="12" class="empty">Upload CSV files to populate this table</td></tr>'; return; }
+      const b = bl(), w = wt(), f1 = sf1();
+      let h = '';
+      for (const s of STACKS) {
+        const r = res[s.id]; if (!r) continue;
+        for (const ns of r.ns) {
+          const rl = ns.latency != null ? ns.latency / b.l : null, rc = ns.cpu != null ? ns.cpu / b.c : null, rb = ns.bw != null ? ns.bw / b.b : null, rr = ns.ram != null ? ns.ram / b.r : null;
+          const O = rl && rc && rb && rr ? w.a * rl + w.b * rc + w.g * rb + w.d * rr : null, PER = O ? f1 / O : null;
+          const fmt = v => v != null ? v.toFixed(3) : '—';
+          const oc = O > 1.5 ? '#A32D2D' : O > 1.1 ? '#854F0B' : '#3B6D11';
+          h += `<tr><td><span class="badge" style="background:${s.hex}18;color:${s.hex}">${s.label}</span></td><td style="color:var(--muted)">${NL[ns.node]}</td><td>${fmt(ns.latency)}</td><td>${fmt(ns.cpu)}</td><td>${fmt(ns.ram)}</td><td>${ns.bw != null ? Math.round(ns.bw) : '—'}</td><td>${fmt(rl)}</td><td>${fmt(rc)}</td><td>${fmt(rb)}</td><td>${fmt(rr)}</td><td style="color:${oc};font-weight:500">${fmt(O)}</td><td>${fmt(PER)}</td></tr>`;
         }
       }
+      tbody.innerHTML = h;
     }
 
-    // Manual log upload
-    document.getElementById('logUpload').addEventListener('change', e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      isLiveLogs = false;
-      const reader = new FileReader();
-      reader.onload = ev => {
-        allLogLines = ev.target.result.split('\n').filter(l => l.length>0);
-        renderLogs();
-        document.getElementById('logStatus').textContent = `${allLogLines.length} lines · ${file.name}`;
-        document.getElementById('logStatus').style.color = '#4f9eff';
-        document.getElementById('logFileLabel').textContent = `· ${file.name}`;
-      };
-      reader.readAsText(file);
-    });
+    function togglePill(btn) {
+      document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active'); activePill = btn.dataset.m; renderCmp();
+    }
 
-    // Rerender on filter/checkbox changes
-    ['logShowInfo','logShowWarning','logShowError'].forEach(id => {
-      document.getElementById(id).addEventListener('change', renderLogs);
-    });
+    function renderCmp() {
+      const sid = document.getElementById('cs').value, nid = document.getElementById('cn').value, m = activePill;
+      const s = STACKS.find(x => x.id === sid);
+      document.getElementById('cmp-title').textContent = `${s.label} vs baseline · ${NL[nid]} · ${ML[m]}`;
+      const b = bl(), blMap = { latency_s: b.l, cpu_avg_pct: b.c, ram_avg_mb: b.r, bandwidth_bytes: b.b };
+      const secR = store[sid][nid] || [];
+      const maxR = Math.max(secR.length, 2);
+      const rls = Array.from({ length: maxR }, (_, i) => `R${i + 1}`);
+      const blData = Array(maxR).fill(blMap[m]);
+      const secData = secR.map(r => r[m] != null ? +r[m].toFixed(4) : null);
+      ln('c-cmp1', rls, [
+        { label: 'Baseline (N)', data: blData, borderColor: '#888780', backgroundColor: '#88878015', borderWidth: 1.5, borderDash: [6, 4], tension: 0, pointRadius: 0, fill: true },
+        { label: s.label, data: secData, borderColor: s.hex, backgroundColor: s.hex + '20', borderWidth: 2, tension: 0.3, pointRadius: 3, pointHoverRadius: 5, fill: true },
+      ]);
+      const allSS = STACKS.filter(x => store[x.id][nid]?.length);
+      if (!allSS.length) { mk('c-cmp2'); return; }
+      const maxR2 = Math.max(...allSS.map(x => store[x.id][nid].length));
+      const rls2 = Array.from({ length: maxR2 }, (_, i) => `R${i + 1}`);
+      ln('c-cmp2', rls2, [
+        { label: 'Baseline (N)', data: Array(maxR2).fill(blMap[m]), borderColor: '#888780', backgroundColor: 'transparent', borderWidth: 1.5, borderDash: [6, 4], tension: 0, pointRadius: 0, fill: false },
+        ...allSS.map(x => ({ label: x.label, data: store[x.id][nid].map(r => r[m] != null ? +r[m].toFixed(4) : null), borderColor: x.hex, backgroundColor: 'transparent', borderWidth: 2, tension: 0.3, pointRadius: 2.5, fill: false }))
+      ]);
+    }
 
-    // Poll every 3 s
-    setInterval(fetchLiveLogs, 3000);
-    fetchLiveLogs();
+    function swTab(id, btn) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + id).classList.add('active'); btn.classList.add('active');
+      if (id === 'compare') renderCmp();
+    }
 
+    buildGrid();
   </script>
 </body>
 

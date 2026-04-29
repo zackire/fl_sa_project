@@ -217,10 +217,12 @@ class SecureAggregationClient:
         else:
             logging.info(f"[{self.client_id}] No global model yet — using local init weights.")
 
-        # Step 2 — Get local weights
-        time.sleep(2)
+        # Step 2 — Local training: fine-tune from the global starting point
+        # fit() runs SGD for local_epochs passes over this client's partition.
+        # The resulting weights are the local update w_i that gets masked next.
+        self.ml_model.fit()
         local_weights = self.ml_model.get_weights()
-        _log_weights(self.client_id, local_weights, label="Local weights (plaintext)")
+        _log_weights(self.client_id, local_weights, label="Local weights after training")
 
         # Step 3 — Quantize and flatten
         quantized_w = quantize(local_weights, clipping_range=10.0, target_range=2**24)
