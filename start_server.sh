@@ -37,6 +37,8 @@ else
     export PROTOCOL_MODE="secagg"
 fi
 
+PC_UPLOAD_IP="100.119.63.85"
+
 echo "🔒 Checking for existing mTLS certificates for 'fl_server'..."
 if [ ! -d "certs/clients/fl_server" ]; then
     echo "   [!] Certificates not found. Auto-provisioning via secure OpenSSL..."
@@ -67,11 +69,43 @@ if command -v docker >/dev/null 2>&1 && ! groups | grep -q "\bdocker\b"; then
 fi
 
 if docker info >/dev/null 2>&1; then
+    touch .run_start_marker
     echo "🐳 Running Docker Compose natively..."
     docker compose -f docker-compose.server.yml up -d --build
 else
+    touch .run_start_marker
     echo "🐳 Sudo required for Docker. Escalating privileges..."
     sudo -E docker compose -f docker-compose.server.yml up -d --build
 fi
 
-echo "Done! Run 'docker logs -f fl_server' to watch the server orchestrate the training round."
+if [ "$(uname -s)" == "Darwin" ]; then
+    echo "💻 Running on a MacBook. Skipping file auto-upload."
+    exit 0
+fi
+
+echo "⏳ Waiting for the container to finish to send results back..."
+if docker info >/dev/null 2>&1; then
+    docker wait "fl_server"
+else
+    sudo docker wait "fl_server"
+fi
+
+echo "📦 Extracting the latest metrics and logs from this run..."
+FILES_TO_ZIP=""
+
+LATEST_LOG=$(ls -t logs/*.log 2>/dev/null | head -n 1)
+if [ ! -z "$LATEST_LOG" ]; then
+    FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_LOG"
+fi
+
+LATEST_UTILITY=$(ls -t metrics/results/utilities/*.csv 2>/dev/null | head -n 1)
+if [ ! -z "$LATEST_UTILITY" ]; then
+    FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_UTILITY"
+fi
+
+tar -czf "results_server.tar.gz" $FILES_TO_ZIP
+
+echo "📤 Uploading to PC ($PC_UPLOAD_IP)..."
+curl -T "results_server.tar.gz" "http://$PC_UPLOAD_IP:8000/results_server.tar.gz"
+echo ""
+echo "✅ Auto-upload complete!"
