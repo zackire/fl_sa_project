@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import pandas as pd
 from typing import List, Tuple
+from datetime import datetime
 from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, precision_score, recall_score
@@ -145,7 +146,8 @@ class LocalLogisticRegressionModel:
         # Setup Metrics Logging
         self.metrics_dir = "metrics/results/model"
         os.makedirs(self.metrics_dir, exist_ok=True)
-        self.metrics_file = os.path.join(self.metrics_dir, f"{self.client_id}_ml_metrics.csv")
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.metrics_file = os.path.join(self.metrics_dir, f"{self.client_id}_ml_metrics_{timestamp}.csv")
         
         if not os.path.exists(self.metrics_file):
             with open(self.metrics_file, "w") as f:

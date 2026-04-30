@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime
 
 def setup_custom_logger(name):
     formatter = logging.Formatter(fmt='%(asctime)s - [%(name)s] - %(levelname)s - %(message)s')
@@ -9,7 +10,8 @@ def setup_custom_logger(name):
         os.makedirs('logs')
 
     # File Handler
-    file_handler = logging.FileHandler(f'logs/{name}.log')
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    file_handler = logging.FileHandler(f'logs/{name}_{timestamp}.log')
     file_handler.setFormatter(formatter)
 
     # Console Handler
