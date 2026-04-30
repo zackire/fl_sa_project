@@ -43,9 +43,6 @@ class VanillaFLClient:
         msg_type = meta.get("msg_type")
 
         if msg_type == "global_model":
-            self.current_round += 1
-            if self.metrics:
-                self.metrics.round_start(self.current_round)
             self._handle_global_model(data)
         elif msg_type == "ignition":
             round_num = meta.get("round", 1)
@@ -53,7 +50,7 @@ class VanillaFLClient:
             if self.metrics:
                 self.metrics.round_start(self.current_round)
             logging.info(f"[{self.client_id}] Ignition received — starting Round {round_num}.")
-            # Send the PREVIOUSLY trained weights (trained on boot)
+            # Send the PREVIOUSLY trained weights (trained on boot or end of last round)
             self._send_weights()
 
     # ---------------------------------------------------------------------- #
@@ -61,10 +58,7 @@ class VanillaFLClient:
     # ---------------------------------------------------------------------- #
 
     def _handle_global_model(self, data: dict):
-        # 1. Send the ALREADY computed local weights from the previous round
-        self._send_weights()  # Note: _send_weights calls metrics.round_end()!
-
-        # 2. Post-round processing: Apply new global weights and Train
+        # 1. Post-round processing: Apply new global weights
         global_weights_list = data.get("global_weights", [])
 
         if global_weights_list:
@@ -73,7 +67,11 @@ class VanillaFLClient:
             _log_weights(self.client_id, global_weights, label="Global model")
             self.model.set_weights(global_weights)
 
-        # Train locally outside the measurement window
+        # End metrics for communication (since receiving global model is the last step)
+        if self.metrics:
+            self.metrics.round_end(self.current_round)
+
+        # 2. Train locally outside the measurement window
         logging.info(f"[{self.client_id}] Running post-round local training …")
         self.model.fit()
 
@@ -92,9 +90,6 @@ class VanillaFLClient:
         })
         self._publish(f"fl/client/{self.client_id}/to_server", payload)
         logging.info(f"[{self.client_id}] Weights published to server ✓")
-        
-        if self.metrics:
-            self.metrics.round_end(self.current_round)
 
 
 # ---------------------------------------------------------------------- #

@@ -118,7 +118,16 @@ class VanillaFLServer:
         logging.info("\n[Server] FedAvg result — New Global Model:")
         _log_weights("Global model", self.current_global_weights)
 
-        # Metrics: round ends once the global model is computed
+        # Broadcast global model immediately so clients can train
+        logging.info("[Server] Broadcasting global model to all clients...")
+        weights_to_send = [w.tolist() for w in self.current_global_weights]
+        payload = json.dumps({
+            "meta": {"msg_type": "global_model"},
+            "data": {"global_weights": weights_to_send}
+        })
+        self._publish("fl/server/broadcast", payload)
+
+        # Metrics: round ends once the global model is computed and sent
         if self.metrics:
             self.metrics.round_end(self.round_number)
 
@@ -143,15 +152,12 @@ class VanillaFLServer:
             if self.metrics:
                 self.metrics.round_start(self.round_number)
 
-            logging.info("[Server] Broadcasting global model to all clients...")
-            _log_weights("Global model (broadcast)", self.current_global_weights)
-
-            weights_to_send = [w.tolist() for w in self.current_global_weights]
             payload = json.dumps({
-                "meta": {"msg_type": "global_model"},
-                "data": {"global_weights": weights_to_send}
+                "meta": {"msg_type": "ignition", "round": self.round_number},
+                "data": {}
             })
             self._publish("fl/server/broadcast", payload)
+            logging.info(f"[Server] Ignition broadcast sent to all clients.")
 
         threading.Thread(target=auto_start, daemon=True).start()
 
