@@ -207,22 +207,19 @@ class SecureAggregationClient:
         data = self.pending_global_model
         self.pending_global_model = None
 
-        # Step 1 — Update local model with global weights (if any)
+        # Step 1 — Store global weights for POST-ROUND training
         global_weights_raw = data.get("global_weights", [])
         if global_weights_raw:
-            global_weights = [np.array(w) for w in global_weights_raw]
-            logging.info(f"[{self.client_id}] Global model received from server.")
-            _log_weights(self.client_id, global_weights, label="Global model")
-            self.ml_model.set_weights(global_weights)
+            self.pending_global_weights = [np.array(w) for w in global_weights_raw]
+            logging.info(f"[{self.client_id}] Global model received and stored for post-round training.")
         else:
-            logging.info(f"[{self.client_id}] No global model yet — using local init weights.")
+            self.pending_global_weights = None
+            logging.info(f"[{self.client_id}] No global model yet — will use local init weights.")
 
-        # Step 2 — Local training: fine-tune from the global starting point
-        # fit() runs SGD for local_epochs passes over this client's partition.
-        # The resulting weights are the local update w_i that gets masked next.
-        self.ml_model.fit()
+        # Step 2 — Retrieve ALREADY TRAINED local weights for masking
+        # These weights were trained at the end of the *previous* round (or initial boot)
         local_weights = self.ml_model.get_weights()
-        _log_weights(self.client_id, local_weights, label="Local weights after training")
+        _log_weights(self.client_id, local_weights, label="Previously trained local weights for SA")
 
         # Step 3 — Quantize and flatten
         quantized_w = quantize(local_weights, clipping_range=10.0, target_range=2**24)
@@ -285,6 +282,18 @@ class SecureAggregationClient:
             logging.info(
                 f"[Metrics][{self.client_id}] Round {self.round_number} measurement ended (R3 done)"
             )
+
+        # ---- POST-ROUND ML TRAINING ----
+        # Now that metrics are finalized, we can do the heavy CPU/RAM work safely
+        if getattr(self, "pending_global_weights", None) is not None:
+            logging.info(f"[{self.client_id}] Applying pending global weights to local model...")
+            self.ml_model.set_weights(self.pending_global_weights)
+            self.pending_global_weights = None
+
+        logging.info(f"[{self.client_id}] Starting post-round ML training...")
+        self.ml_model.fit()
+        logging.info(f"[{self.client_id}] ML training complete. Ready for next round.")
+
         self.round_number += 1
 
     # ---------------------------------------------------------------------- #
