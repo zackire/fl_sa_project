@@ -1,7 +1,0 @@
-node_label,round_num,timestamp,latency_s,cpu_avg_pct,ram_avg_mb,bw_tx_bytes,bw_rx_bytes,bw_total_bytes
-secagg_stackC_client_client3,1,2026-04-28T11:08:40,3.5361,2.83,214.71,1636,1431,3067
-secagg_stackC_client_client3,2,2026-04-28T11:13:46,3.534,3.13,215.54,1639,1959,3598
-secagg_stackC_client_client3,3,2026-04-28T11:18:53,3.5646,2.51,215.54,1637,1957,3594
-secagg_stackC_client_client3,4,2026-04-28T11:23:59,3.5514,3.37,215.54,1633,1960,3593
-secagg_stackC_client_client3,5,2026-04-28T11:29:05,3.5591,3.37,215.54,1633,1955,3588
-secagg_stackC_client_client3,6,2026-04-28T11:34:11,3.5541,2.81,215.54,1636,1958,3594
