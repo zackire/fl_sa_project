@@ -16,11 +16,8 @@ echo ""
 
 # --- 2. Server IP ---
 echo "GUIDE: Enter the local network IPv4 address where the Aggregator Server is running."
-read -p "Enter the Server's IP address (e.g. 192.168.1.100 or 10.0.0.5): " input_server_ip
-if [ -z "$input_server_ip" ]; then
-    echo "Error: Server IP cannot be empty."
-    exit 1
-fi
+read -p "Enter the Server's IP address (Press Enter to default to 192.168.137.86): " input_server_ip
+input_server_ip=${input_server_ip:-192.168.137.86}
 echo ""
 
 # --- 3. Crypto Stack ---

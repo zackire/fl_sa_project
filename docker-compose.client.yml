@@ -33,7 +33,7 @@ services:
     volumes:
       - ./certs/clients/${CLIENT_ID}:/app/certs:ro
       - ./:/app
-      - ./metrics/results:/app/metrics/results/utilities
+      - ./metrics/results:/app/metrics/results
       # Dataset: same ./data/ folder, read-only in every client container
       - ./data:/app/data:ro
       # Persist the kagglehub download cache across container restarts

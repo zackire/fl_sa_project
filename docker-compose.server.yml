@@ -31,7 +31,7 @@ services:
     volumes:
       - ./certs/clients/fl_server:/app/certs:ro
       - ./:/app
-      - ./metrics/results:/app/metrics/results/utilities
+      - ./metrics/results:/app/metrics/results
       # Dataset: place Train_Test_Network.csv in ./data/ next to docker-compose
       - ./data:/app/data:ro
       # Persist the kagglehub download cache across container restarts
