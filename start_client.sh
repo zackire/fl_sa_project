@@ -85,9 +85,19 @@ else
     sudo -E docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build --force-recreate
 fi
 
-if [ "$(uname -s)" == "Darwin" ]; then
-    echo "💻 Running on a MacBook. Skipping file auto-upload."
+# --- Detect Raspberry Pi ---
+IS_RASPBERRY_PI=false
+if [ -f /proc/cpuinfo ] && grep -qi "Raspberry Pi\|BCM" /proc/cpuinfo 2>/dev/null; then
+    IS_RASPBERRY_PI=true
+fi
+if [ -f /sys/firmware/devicetree/base/model ] && grep -qi "Raspberry Pi" /sys/firmware/devicetree/base/model 2>/dev/null; then
+    IS_RASPBERRY_PI=true
+fi
+
+if [ "$IS_RASPBERRY_PI" = false ]; then
+    echo "💻 Not a Raspberry Pi. Skipping file auto-upload."
 else
+    echo "🍓 Raspberry Pi detected. Auto-upload enabled."
     # Run the wait and auto-upload logic in a background subshell
     (
         if docker info >/dev/null 2>&1; then

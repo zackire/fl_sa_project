@@ -18,11 +18,11 @@ Tracked metrics (per round):
   • Bandwidth    — TX + RX combined (bytes)
 
 CSV filename format:
-  <protocol>_<stack>_<role>_<node_id>_<YYYYMMDD_HHMMSS>.csv
+  <node_id>_<stack>_<YYYYMMDD_HHMMSS>.csv
   Examples:
-    secagg_stackA_server_server_20260426_115300.csv
-    secagg_stackA_client_client1_20260426_115300.csv
-    baseline_server_server_20260426_115300.csv
+    server_stackA_20260426_115300.csv
+    client1_stackA_20260426_115300.csv
+    server_baseline_20260426_115300.csv
 
 Docker note:
   Mount the output directory as a volume so the CSV is visible on the host:
@@ -73,7 +73,7 @@ _CPU_SAMPLE_INTERVAL_S = 0.5
 
 @dataclass
 class RoundMetrics:
-    node_label:      str   # e.g. "secagg_stackA_server" or "secagg_stackA_client1"
+    node_label:      str   # e.g. "server_stackA" or "client1_stackA"
     round_num:       int
     timestamp:       str   = ""
     latency_s:       float = 0.0
@@ -139,10 +139,10 @@ class MetricsCollector:
             output_dir: Directory for the CSV. Mount this as a Docker volume.
 
         CSV filename produced:
-            <protocol>_<stack>_<role>_<node_id>_<YYYYMMDD_HHMMSS>.csv
-            e.g.  secagg_stackA_server_server_20260426_115300.csv
-                  secagg_stackA_client_client1_20260426_115300.csv
-                  baseline_server_server_20260426_115300.csv
+            <node_id>_<stack>_<YYYYMMDD_HHMMSS>.csv
+            e.g.  server_stackA_20260426_115300.csv
+                  client1_stackA_20260426_115300.csv
+                  server_baseline_20260426_115300.csv
         """
         self.protocol   = protocol
         self.stack      = stack
@@ -151,10 +151,11 @@ class MetricsCollector:
         self.output_dir = output_dir
 
         # Human-readable label stored in every CSV row
+        # Short format: e.g. "server_stackA", "client1_stackA", "server_baseline"
         if stack:
-            self.node_label = f"{protocol}_{stack}_{role}_{node_id}"
+            self.node_label = f"{node_id}_{stack}"
         else:
-            self.node_label = f"{protocol}_{role}_{node_id}"
+            self.node_label = f"{node_id}_baseline"
 
         # Prime psutil process handle and take a throwaway cpu_percent reading
         # so subsequent blocking calls return real values from the first sample.
@@ -172,11 +173,14 @@ class MetricsCollector:
         # Completed rounds (kept in memory for print_summary)
         self._completed: List[RoundMetrics] = []
 
-        # CSV filename: <protocol>_<stack>_<role>_<node_id>_<timestamp>.csv
+        # CSV filename: <node_id>_<stack>_<timestamp>.csv
+        # Examples:
+        #   server_stackA_20260426_115300.csv
+        #   client1_stackA_20260426_115300.csv
+        #   server_baseline_20260426_115300.csv
         os.makedirs(output_dir, exist_ok=True)
-        parts = [p for p in [protocol, stack, role, node_id] if p]
-        ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self._csv_path = os.path.join(output_dir, f"{'_'.join(parts)}_{ts}.csv")
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._csv_path = os.path.join(output_dir, f"{self.node_label}_{ts}.csv")
 
         self._init_csv()
         logging.info(
