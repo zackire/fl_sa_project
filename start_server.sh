@@ -70,42 +70,86 @@ fi
 
 if docker info >/dev/null 2>&1; then
     touch .run_start_marker
+    # --force-recreate guarantees the container is completely destroyed and rebuilt.
+    # This ensures the process starts from scratch and doesn't remember previous rounds.
     echo "🐳 Running Docker Compose natively..."
-    docker compose -f docker-compose.server.yml up -d --build
+    docker compose -f docker-compose.server.yml up -d --build --force-recreate
 else
     touch .run_start_marker
+    # --force-recreate guarantees the container is completely destroyed and rebuilt.
+    # This ensures the process starts from scratch and doesn't remember previous rounds.
     echo "🐳 Sudo required for Docker. Escalating privileges..."
-    sudo -E docker compose -f docker-compose.server.yml up -d --build
+    sudo -E docker compose -f docker-compose.server.yml up -d --build --force-recreate
 fi
 
 if [ "$(uname -s)" == "Darwin" ]; then
     echo "💻 Running on a MacBook. Skipping file auto-upload."
+    if docker info >/dev/null 2>&1; then
+        docker logs -f "fl_server"
+    else
+        sudo docker logs -f "fl_server"
+    fi
     exit 0
 fi
 
-echo "⏳ Waiting for the container to finish to send results back..."
+echo "⏳ Setting up background task to handle uploads..."
+
+# Background subshell
+(
+    trap '' SIGINT # Prevents Ctrl+C from killing this background task
+
+    if docker info >/dev/null 2>&1; then
+        docker wait "fl_server" >/dev/null 2>&1
+    else
+        sudo docker wait "fl_server" >/dev/null 2>&1
+    fi
+
+    echo -e "\n\n📦 Aggregator stopped! Extracting the latest metrics and logs..."
+    FILES_TO_ZIP=""
+
+    LATEST_LOG=$(ls -t logs/*.log 2>/dev/null | head -n 1)
+    [ ! -z "$LATEST_LOG" ] && FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_LOG"
+
+    LATEST_UTILITY=$(ls -t metrics/results/utilities/*.csv 2>/dev/null | head -n 1)
+    [ ! -z "$LATEST_UTILITY" ] && FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_UTILITY"
+
+    if [ ! -z "$FILES_TO_ZIP" ]; then
+        tar -czf "results_server.tar.gz" $FILES_TO_ZIP
+        echo "📤 Uploading to PC ($PC_UPLOAD_IP)..."
+        curl -s -T "results_server.tar.gz" "http://$PC_UPLOAD_IP:8000/results_server.tar.gz"
+        echo "✅ Auto-upload complete for server!"
+    fi
+) &
+UPLOADER_PID=$! # Save the process ID of the background task
+
+# Define what happens when you press Ctrl+C
+cleanup() {
+    echo -e "\n🛑 Ctrl+C detected! Stopping container 'fl_server'..."
+    if docker info >/dev/null 2>&1; then
+        docker stop "fl_server" >/dev/null
+    else
+        sudo docker stop "fl_server" >/dev/null
+    fi
+    echo "⏳ Waiting for auto-upload to finish..."
+    wait $UPLOADER_PID
+    echo "👋 Done! Exiting."
+    exit 0
+}
+
+# Trap Ctrl+C (SIGINT) and route it to the cleanup function
+trap cleanup SIGINT
+
+echo "💡 Switching to live logs now..."
+echo "   (Note: Press Ctrl+C at any time to STOP the server and upload results.)"
+echo "=========================================================================="
+
+# Follow logs in the foreground
 if docker info >/dev/null 2>&1; then
-    docker wait "fl_server"
+    docker logs -f "fl_server"
 else
-    sudo docker wait "fl_server"
+    sudo docker logs -f "fl_server"
 fi
 
-echo "📦 Extracting the latest metrics and logs from this run..."
-FILES_TO_ZIP=""
-
-LATEST_LOG=$(ls -t logs/*.log 2>/dev/null | head -n 1)
-if [ ! -z "$LATEST_LOG" ]; then
-    FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_LOG"
-fi
-
-LATEST_UTILITY=$(ls -t metrics/results/utilities/*.csv 2>/dev/null | head -n 1)
-if [ ! -z "$LATEST_UTILITY" ]; then
-    FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_UTILITY"
-fi
-
-tar -czf "results_server.tar.gz" $FILES_TO_ZIP
-
-echo "📤 Uploading to PC ($PC_UPLOAD_IP)..."
-curl -T "results_server.tar.gz" "http://$PC_UPLOAD_IP:8000/results_server.tar.gz"
-echo ""
-echo "✅ Auto-upload complete!"
+# If the container finishes naturally on its own (without Ctrl+C)
+echo -e "\n⏳ Server finished naturally. Waiting for upload..."
+wait $UPLOADER_PID
