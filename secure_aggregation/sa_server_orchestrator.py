@@ -315,8 +315,8 @@ class SecureAggregationServer:
 
     def _schedule_next_round(self):
         def auto_start():
-            logging.info(f"[Server] Next round in 5 min  →  Round {self.round_number}")
-            time.sleep(300)
+            logging.info(f"[Server] Next round in 2 min  →  Round {self.round_number}")
+            time.sleep(120)
             self._reset_state_pools()
             _section_header(f"ROUND {self.round_number} — START")
             payload = json.dumps({

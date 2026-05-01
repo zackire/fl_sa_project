@@ -144,8 +144,8 @@ class VanillaFLServer:
         self.received_weights.clear()
 
         def auto_start():
-            logging.info(f"[Server] Next round in 5 min  →  Round {self.round_number}")
-            time.sleep(300)
+            logging.info(f"[Server] Next round in 2 min  →  Round {self.round_number}")
+            time.sleep(120)
 
             _section_header(f"ROUND {self.round_number} — START")
 
