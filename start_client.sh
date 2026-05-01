@@ -70,50 +70,71 @@ if docker info >/dev/null 2>&1; then
     docker network inspect fl_shared_bridge >/dev/null 2>&1 || docker network create fl_shared_bridge
 
     touch .run_start_marker
+    # --force-recreate guarantees the container is completely destroyed and rebuilt.
+    # This ensures the ML model starts from scratch and doesn't remember previous rounds.
     echo "🐳 Running Docker Compose natively..."
-    docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build
+    docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build --force-recreate
 else
     echo "🌐 Ensuring Docker network 'fl_shared_bridge' exists via sudo..."
     sudo docker network inspect fl_shared_bridge >/dev/null 2>&1 || sudo docker network create fl_shared_bridge
 
     touch .run_start_marker
+    # --force-recreate guarantees the container is completely destroyed and rebuilt.
+    # This ensures the ML model starts from scratch and doesn't remember previous rounds.
     echo "🐳 Sudo required for Docker. Escalating privileges..."
-    sudo -E docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build
+    sudo -E docker compose -p "project_$input_client_id" -f docker-compose.client.yml up -d --build --force-recreate
 fi
 
-if [ "$(uname -s)" == "Darwin" ]; then
-    echo "💻 Running on a MacBook. Skipping file auto-upload."
-    exit 0
+# --- Detect Raspberry Pi ---
+IS_RASPBERRY_PI=false
+if [ -f /proc/cpuinfo ] && grep -qi "Raspberry Pi\|BCM" /proc/cpuinfo 2>/dev/null; then
+    IS_RASPBERRY_PI=true
+fi
+if [ -f /sys/firmware/devicetree/base/model ] && grep -qi "Raspberry Pi" /sys/firmware/devicetree/base/model 2>/dev/null; then
+    IS_RASPBERRY_PI=true
 fi
 
-echo "⏳ Waiting for the container to finish to send results back..."
-if docker info >/dev/null 2>&1; then
-    docker wait "fl_$input_client_id"
+if [ "$IS_RASPBERRY_PI" = false ]; then
+    echo "💻 Not a Raspberry Pi. Skipping file auto-upload."
 else
-    sudo docker wait "fl_$input_client_id"
+    echo "🍓 Raspberry Pi detected. Auto-upload enabled."
+    # Run the wait and auto-upload logic in a background subshell
+    (
+        if docker info >/dev/null 2>&1; then
+            docker wait "fl_$input_client_id" >/dev/null
+        else
+            sudo docker wait "fl_$input_client_id" >/dev/null
+        fi
+
+        echo -e "\n📦 Container finished. Extracting the latest metrics and logs..."
+        FILES_TO_ZIP=""
+
+        LATEST_LOG=$(ls -t logs/*.log 2>/dev/null | head -n 1)
+        if [ ! -z "$LATEST_LOG" ]; then
+            FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_LOG"
+        fi
+
+        LATEST_UTILITY=$(ls -t metrics/results/utilities/*.csv 2>/dev/null | head -n 1)
+        if [ ! -z "$LATEST_UTILITY" ]; then
+            FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_UTILITY"
+        fi
+
+        LATEST_MODEL=$(ls -t metrics/results/model/*.csv 2>/dev/null | head -n 1)
+        if [ ! -z "$LATEST_MODEL" ]; then
+            FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_MODEL"
+        fi
+
+        tar -czf "results_${input_client_id}.tar.gz" $FILES_TO_ZIP
+
+        echo "📤 Uploading to PC ($PC_UPLOAD_IP)..."
+        curl -s -T "results_${input_client_id}.tar.gz" "http://$PC_UPLOAD_IP:8000/results_${input_client_id}.tar.gz" >/dev/null
+        echo "✅ Auto-upload complete!"
+    ) &
 fi
 
-echo "📦 Extracting the latest metrics and logs from this run..."
-FILES_TO_ZIP=""
-
-LATEST_LOG=$(ls -t logs/*.log 2>/dev/null | head -n 1)
-if [ ! -z "$LATEST_LOG" ]; then
-    FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_LOG"
+echo "📺 Streaming live logs (Press Ctrl+C to exit logs early; container will keep running)..."
+if docker info >/dev/null 2>&1; then
+    docker logs -f "fl_$input_client_id"
+else
+    sudo docker logs -f "fl_$input_client_id"
 fi
-
-LATEST_UTILITY=$(ls -t metrics/results/utilities/*.csv 2>/dev/null | head -n 1)
-if [ ! -z "$LATEST_UTILITY" ]; then
-    FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_UTILITY"
-fi
-
-LATEST_MODEL=$(ls -t metrics/results/model/*.csv 2>/dev/null | head -n 1)
-if [ ! -z "$LATEST_MODEL" ]; then
-    FILES_TO_ZIP="$FILES_TO_ZIP $LATEST_MODEL"
-fi
-
-tar -czf "results_${input_client_id}.tar.gz" $FILES_TO_ZIP
-
-echo "📤 Uploading to PC ($PC_UPLOAD_IP)..."
-curl -T "results_${input_client_id}.tar.gz" "http://$PC_UPLOAD_IP:8000/results_${input_client_id}.tar.gz"
-echo ""
-echo "✅ Auto-upload complete!"
