@@ -32,9 +32,28 @@ class SecureAggregationServer:
         self.model_dimensions = model_dimensions   # e.g. [(10,), (1,)]
         self.metrics          = metrics            # MetricsCollector | None
         self.round_number     = 1
+        self._round_limit     = None   # None = run indefinitely
 
         self.current_global_weights: List[np.ndarray] = []
         self._reset_state_pools()
+
+    # ---------------------------------------------------------------------- #
+    #  Round limit control                                                    #
+    # ---------------------------------------------------------------------- #
+
+    def set_round_limit(self, num_rounds: int | None):
+        """
+        Set the maximum number of rounds. When reached, the server will shut down
+        instead of scheduling the next round. Pass None (default) for unlimited.
+        """
+        self._round_limit = num_rounds
+        if num_rounds is not None:
+            logging.info(
+                f"[Server] Round limit set to {num_rounds}. "
+                f"Server will shut down after round {num_rounds}."
+            )
+        else:
+            logging.info("[Server] No round limit. Server will run indefinitely.")
 
     # ---------------------------------------------------------------------- #
     #  State reset                                                            #
@@ -310,10 +329,21 @@ class SecureAggregationServer:
         self._schedule_next_round()
 
     # ---------------------------------------------------------------------- #
-    #  Next-round scheduling                                                 #
+    #  Next-round scheduling / shutdown                                      #
     # ---------------------------------------------------------------------- #
 
     def _schedule_next_round(self):
+        # Check if we've hit the round limit
+        if self._round_limit is not None and self.round_number > self._round_limit:
+            logging.info(
+                f"\n{'='*60}\n"
+                f"  Round limit ({self._round_limit}) reached. Shutting down.\n"
+                f"{'='*60}"
+            )
+            # Gracefully stop the MQTT handler and exit the process
+            self._shutdown()
+            return
+
         def auto_start():
             logging.info(f"[Server] Next round in 5 min  →  Round {self.round_number}")
             time.sleep(300)
@@ -335,6 +365,21 @@ class SecureAggregationServer:
         if self.metrics:
             self.metrics.record_bytes(len(payload.encode("utf-8")))
         self.mqtt.publish(topic, payload)
+
+    # ---------------------------------------------------------------------- #
+    #  Graceful shutdown                                                     #
+    # ---------------------------------------------------------------------- #
+
+    def _shutdown(self):
+        """Called when the round limit is reached. Prints summary and exits."""
+        logging.info("[Server] Graceful shutdown initiated.")
+        if self.metrics:
+            self.metrics.print_summary()
+        # Stop the MQTT loop and exit the process
+        self.mqtt.stop()
+        # Use os._exit to forcefully terminate the main thread waiting on time.sleep
+        import os
+        os._exit(0)
 
 
 # ---------------------------------------------------------------------- #

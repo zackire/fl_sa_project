@@ -16,6 +16,21 @@ class VanillaFLServer:
         self.received_weights       = {}   # {client_id: [coef_vec, intercept_vec]}
         self.current_global_weights = []
         self.round_number           = 1
+        self._round_limit           = None
+
+    # ---------------------------------------------------------------------- #
+    #  Round limit control                                                    #
+    # ---------------------------------------------------------------------- #
+
+    def set_round_limit(self, num_rounds: int | None):
+        self._round_limit = num_rounds
+        if num_rounds is not None:
+            logging.info(
+                f"[Server] Round limit set to {num_rounds}. "
+                f"Server will shut down after round {num_rounds}."
+            )
+        else:
+            logging.info("[Server] No round limit. Server will run indefinitely.")
 
     # ---------------------------------------------------------------------- #
     #  MQTT interface                                                         #
@@ -128,11 +143,21 @@ class VanillaFLServer:
         self._schedule_next_round()
 
     # ---------------------------------------------------------------------- #
-    #  Next-round scheduling                                                 #
+    #  Next-round scheduling / shutdown                                      #
     # ---------------------------------------------------------------------- #
 
     def _schedule_next_round(self):
         self.received_weights.clear()
+
+        # Check if we've hit the round limit
+        if self._round_limit is not None and self.round_number > self._round_limit:
+            logging.info(
+                f"\n{'='*60}\n"
+                f"  Round limit ({self._round_limit}) reached. Shutting down.\n"
+                f"{'='*60}"
+            )
+            self._shutdown()
+            return
 
         def auto_start():
             logging.info(f"[Server] Next round in 5 min  →  Round {self.round_number}")
@@ -163,6 +188,18 @@ class VanillaFLServer:
         if self.metrics:
             self.metrics.record_bytes(len(payload.encode("utf-8")))
         self.mqtt.publish(topic, payload)
+
+    # ---------------------------------------------------------------------- #
+    #  Graceful shutdown                                                     #
+    # ---------------------------------------------------------------------- #
+
+    def _shutdown(self):
+        logging.info("[Server] Graceful shutdown initiated.")
+        if self.metrics:
+            self.metrics.print_summary()
+        self.mqtt.stop()
+        import os
+        os._exit(0)
 
 
 # ---------------------------------------------------------------------- #

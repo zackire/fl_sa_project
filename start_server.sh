@@ -37,6 +37,13 @@ else
     export PROTOCOL_MODE="secagg"
 fi
 
+# --- 4. Number of FL Rounds ---
+echo "GUIDE: Enter the number of Federated Learning rounds to run."
+echo "       Server will shut down automatically after completing all rounds."
+read -p "Enter Number of Rounds (Press Enter to default to 10): " input_rounds
+input_rounds=${input_rounds:-10}
+echo ""
+
 PC_UPLOAD_IP="100.119.63.85"
 
 echo "🔒 Checking for existing mTLS certificates for 'fl_server'..."
@@ -58,6 +65,7 @@ export EXPECTED_K=$input_k
 export THRESHOLD_T=$input_t
 export CRYPTO_STACK=$input_stack
 export PROTOCOL_MODE=$PROTOCOL_MODE
+export NUM_ROUNDS=$input_rounds
 
 echo "🔓 Pre-emptively granting Docker read-access to SSL certificates..."
 sudo chmod -R a+rx certs/

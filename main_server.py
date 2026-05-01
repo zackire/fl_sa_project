@@ -30,6 +30,8 @@ def main():
                         help="Path to Train_Test_Network.csv — used only to probe feature dimensions")
     parser.add_argument("--results-dir", type=str, default="metrics/results/utilities",
                         help="Directory to write metrics CSV files (default: metrics/results/utilities)")
+    parser.add_argument("--rounds", type=int, default=None,
+                        help="Number of FL rounds to run before shutting down (default: run indefinitely)")
     args = parser.parse_args()
 
     logger = setup_custom_logger("server")
@@ -99,6 +101,9 @@ def main():
 
     mqtt_handler.set_orchestrator(orchestrator)
     mqtt_handler.start()
+
+    # Signal the orchestrator about the desired round limit
+    orchestrator.set_round_limit(args.rounds)
 
     try:
         while True:
