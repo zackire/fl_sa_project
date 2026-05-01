@@ -23,6 +23,7 @@ services:
       - THRESHOLD_T=${THRESHOLD_T:-2}
       - CRYPTO_STACK=${CRYPTO_STACK:-A}
       - PROTOCOL_MODE=${PROTOCOL_MODE:-secagg}
+      - NUM_ROUNDS=${NUM_ROUNDS:-10}
       # Path inside the container — matches the volume mount below
       - DATA_PATH=/app/data/Train_Test_Network.csv
       # ── Kaggle credentials (required if dataset is not pre-mounted) ──────────
@@ -47,7 +48,8 @@ services:
          --cert      /app/certs/client.crt
          --key       /app/certs/client.key
          --data-path /app/data/Train_Test_Network.csv
-         --results-dir /app/metrics/results/utilities"
+         --results-dir /app/metrics/results/utilities
+         --rounds    $${NUM_ROUNDS}"
     ]
     networks:
       - fl_shared_bridge

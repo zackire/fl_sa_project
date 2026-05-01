@@ -10,6 +10,7 @@ class VanillaFLClient:
         self.model = local_model
         self.metrics = metrics
         self.current_round = 1
+        self._round_limit = None
 
         self._check_in_with_server()
 
@@ -21,6 +22,20 @@ class VanillaFLClient:
         if self.metrics:
             self.metrics.record_bytes(len(payload.encode("utf-8")))
         self.mqtt.publish(topic, payload)
+
+    # ---------------------------------------------------------------------- #
+    #  Round limit control                                                    #
+    # ---------------------------------------------------------------------- #
+
+    def set_round_limit(self, num_rounds: int | None):
+        self._round_limit = num_rounds
+        if num_rounds is not None:
+            logging.info(
+                f"[{self.client_id}] Round limit set to {num_rounds}. "
+                f"Client will shut down after round {num_rounds}."
+            )
+        else:
+            logging.info(f"[{self.client_id}] No round limit. Client will run indefinitely.")
 
     # ---------------------------------------------------------------------- #
     #  MQTT interface                                                         #
@@ -74,6 +89,17 @@ class VanillaFLClient:
         # 2. Train locally outside the measurement window
         logging.info(f"[{self.client_id}] Running post-round local training …")
         self.model.fit()
+
+        # Check if we've hit the round limit
+        if self._round_limit is not None and self.current_round > self._round_limit:
+            logging.info(
+                f"[{self.client_id}] Round limit ({self._round_limit}) reached. Shutting down."
+            )
+            if self.metrics:
+                self.metrics.print_summary()
+            self.mqtt.stop()
+            import os
+            os._exit(0)
 
     # ---------------------------------------------------------------------- #
     #  Sending                                                                #

@@ -35,6 +35,8 @@ def main():
                         help="SGD learning rate (default: 0.01)")
     parser.add_argument("--results-dir", type=str, default="metrics/results/utilities",
                         help="Directory to write metrics CSV files (default: metrics/results/utilities)")
+    parser.add_argument("--rounds", type=int, default=None,
+                        help="Number of FL rounds to run before shutting down (default: run indefinitely)")
     args = parser.parse_args()
 
     logger = setup_custom_logger(args.id)
@@ -109,6 +111,9 @@ def main():
 
         mqtt_handler.set_orchestrator(orchestrator)
         mqtt_handler.start()  # Connect to broker FIRST
+
+        # Signal the orchestrator about the desired round limit
+        orchestrator.set_round_limit(args.rounds)
 
         if mode == "baseline":
             logger.info(f"[{args.id}] Baseline standby. Waiting for server ignition...")

@@ -19,6 +19,7 @@ class SecureAggregationClient:
         self.ml_model  = ml_model
         self.metrics   = metrics          # MetricsCollector | None
         self.round_number = 1
+        self._round_limit = None   # None = run indefinitely
 
         # Cryptographic state
         self.public_keys        = {}
@@ -29,6 +30,24 @@ class SecureAggregationClient:
         # Async coordination
         self.received_shares_from = set()
         self.pending_global_model = None
+
+    # ---------------------------------------------------------------------- #
+    #  Round limit control                                                    #
+    # ---------------------------------------------------------------------- #
+
+    def set_round_limit(self, num_rounds: int | None):
+        """
+        Set the maximum number of rounds. When reached, the client will shut down
+        after completing the round. Pass None (default) for unlimited.
+        """
+        self._round_limit = num_rounds
+        if num_rounds is not None:
+            logging.info(
+                f"[{self.client_id}] Round limit set to {num_rounds}. "
+                f"Client will shut down after round {num_rounds}."
+            )
+        else:
+            logging.info(f"[{self.client_id}] No round limit. Client will run indefinitely.")
 
     # ---------------------------------------------------------------------- #
     #  MQTT dispatch                                                          #
@@ -295,6 +314,17 @@ class SecureAggregationClient:
         logging.info(f"[{self.client_id}] ML training complete. Ready for next round.")
 
         self.round_number += 1
+
+        # Check if we've hit the round limit
+        if self._round_limit is not None and self.round_number > self._round_limit:
+            logging.info(
+                f"[{self.client_id}] Round limit ({self._round_limit}) reached. Shutting down."
+            )
+            if self.metrics:
+                self.metrics.print_summary()
+            self.mqtt.stop()
+            import os
+            os._exit(0)
 
     # ---------------------------------------------------------------------- #
     #  MQTT publish wrapper (tracks bandwidth)                                #

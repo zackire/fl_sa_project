@@ -10,6 +10,7 @@ services:
       - SERVER_IP=${SERVER_IP}
       - CRYPTO_STACK=${CRYPTO_STACK}
       - PROTOCOL_MODE=${PROTOCOL_MODE:-secagg}
+      - NUM_ROUNDS=${NUM_ROUNDS:-10}
       # Path inside the container — matches the volume mount below
       - DATA_PATH=/app/data/Train_Test_Network.csv
       # Tune training without rebuilding the image
@@ -28,7 +29,8 @@ services:
       "--key",       "/app/certs/client.key",
       "--data-path", "/app/data/Train_Test_Network.csv",
       "--epochs",    "${LOCAL_EPOCHS:-3}",
-      "--results-dir", "/app/metrics/results/utilities"
+      "--results-dir", "/app/metrics/results/utilities",
+      "--rounds",   "${NUM_ROUNDS}"
     ]
     volumes:
       - ./certs/clients/${CLIENT_ID}:/app/certs:ro
