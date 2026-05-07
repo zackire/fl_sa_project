@@ -7,7 +7,7 @@
 
 A modular testbed for **Federated Learning (FL)** enhanced with **Secure Aggregation (SA)**, enabling privacy-preserving model training across distributed edge and IoT devices. Raw data remains local while model updates are securely masked during aggregation.
 
-> **Status:** Research code accompanying the paper *"Lightweight Cryptography for Secure Aggregation in Federated Learning for Network Anomaly Detection in Critical Infrastructures"* (!!!!!under review / published in [venue], 2026). See [Citation](#citation).
+> **Status:** Research code accompanying the paper *"Lightweight Cryptography for Secure Aggregation in Federated Learning for Network Anomaly Detection in Critical Infrastructures"* (under review, 2026). See [Citation](#citation).
 
 ---
 
