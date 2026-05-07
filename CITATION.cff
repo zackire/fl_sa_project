@@ -1,0 +1,49 @@
+# This CITATION.cff file tells GitHub and Zenodo how this software should be cited.
+# Documentation: https://citation-file-format.github.io/
+# After your first Zenodo release, add the DOI under "identifiers" below.
+
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "FL-SA: A Modular Testbed for Federated Learning with Secure Aggregation"
+abstract: >-
+  A modular testbed for Federated Learning (FL) enhanced with Secure
+  Aggregation (SA), enabling privacy-preserving model training across
+  distributed edge and IoT devices. Supports pluggable cryptographic
+  stacks, MQTT-based communication with mTLS, dropout recovery, and
+  per-round performance metrics for latency, CPU, RAM, and bandwidth.
+authors:
+  - family-names: "Cukur"
+    given-names: "Zakire"
+    orcid: "https://orcid.org/0009-0008-3114-3502"
+repository-code: "https://github.com/zackire/fl_sa_project"
+license: MIT
+keywords:
+  - federated-learning
+  - secure-aggregation
+  - privacy-preserving-machine-learning
+  - lightweight-cryptography
+  - mqtt
+  - edge-computing
+  - iot-security
+  - intrusion-detection
+version: 1.0.0
+date-released: "2026-05-07"
+
+# Once you have a Zenodo DOI, uncomment and fill in:
+# identifiers:
+#   - type: doi
+#     value: 10.5281/zenodo.XXXXXXX
+#     description: "Archived snapshot of version 1.0.0"
+
+# Optional: cite the related paper (uncomment after publication)
+# preferred-citation:
+#   type: article
+#   title: "Your Paper Title"
+#   authors:
+#     - family-names: "Cukur"
+#       given-names: "Zakire"
+#       orcid: "https://orcid.org/0009-0008-3114-3502"
+#   journal: "Journal or Conference Name"
+#   year: 2026
+#   doi: "10.xxxx/xxxxx"

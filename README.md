@@ -1,6 +1,13 @@
 # Federated Learning with Secure Aggregation (FL-SA)
 
-A modular testbed for **Federated Learning (FL)** enhanced with **Secure Aggregation (SA)**, enabling privacy-preserving model training across distributed edge devices. Raw data remains local while model updates are securely masked during aggregation.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+<!-- [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX) -->
+
+A modular testbed for **Federated Learning (FL)** enhanced with **Secure Aggregation (SA)**, enabling privacy-preserving model training across distributed edge and IoT devices. Raw data remains local while model updates are securely masked during aggregation.
+
+> **Status:** Research code accompanying the paper *"Lightweight Cryptography for Secure Aggregation in Federated Learning for Network Anomaly Detection in Critical Infrastructures"* (!!!!!under review / published in [venue], 2026). See [Citation](#citation).
 
 ---
 
@@ -56,9 +63,12 @@ The system supports both distributed deployment (e.g., edge devices) and local e
 Secure Aggregation ensures that only the **final aggregated result** is revealed.
 
 ---
+
 ## Quick Start
 
-**Start Server** 
+> **Prerequisites:** Docker, Docker Compose, and Python 3.10+ on the host. TLS certificates are generated automatically via `generate_certs.sh` on first run.
+
+**Start Server**
 ```bash
 ./start_server.sh
 ```
@@ -79,7 +89,10 @@ docker logs -f fl_server
 ls metrics/results/
 ```
 
+---
+
 ## Configuration
+
 | Variable      | Description                        |
 | ------------- | ---------------------------------- |
 | PROTOCOL_MODE | `secagg` or `baseline`             |
@@ -89,9 +102,11 @@ ls metrics/results/
 | CLIENT_ID     | Unique client identifier           |
 | SERVER_IP     | MQTT broker address                |
 
+---
 
 ## Project Structure
-```bash
+
+```text
 main_server.py        # Server entry point
 main_client.py        # Client entry point
 trigger.py            # Training trigger script
@@ -104,12 +119,28 @@ fl_core/              # Model and aggregation logic
 metrics/              # Performance tracking
 ```
 
+---
+
 ## Security Highlights
+
 - Raw data never leaves client devices
 - Individual model updates remain private
 - Secure aggregation prevents server-side data exposure
 - Supports client dropout recovery
 - End-to-end encrypted communication via mTLS and AEAD
+
+---
+
+## Reproducing the Experiments
+
+To reproduce the results reported in the paper:
+
+1. Clone this repository at the tagged release used in the paper (see [Releases](https://github.com/zackire/fl_sa_project/releases)).
+2. Follow the [Quick Start](#quick-start) instructions to launch the server and clients.
+3. Configure `PROTOCOL_MODE` and `CRYPTO_STACK` according to the experiment under study.
+4. Per-round metrics are written to `metrics/results/` and can be aggregated for analysis.
+
+---
 
 ## Purpose
 
@@ -120,6 +151,42 @@ This project is designed for research and experimentation in:
 - Federated learning systems
 - Edge and IoT environments
 
+---
+
+## Citation
+
+If you use this software in your research, please cite it as:
+
+```bibtex
+@software{fl_sa_project_2026,
+  author       = {Zakire Cukur},
+  title        = {{FL-SA: A Modular Testbed for Federated
+                   Learning with Secure Aggregation}},
+  year         = {2026},
+  publisher    = {Zenodo},
+  version      = {v1.0.0},
+  doi          = {10.5281/zenodo.XXXXXXX},
+  url          = {https://github.com/zackire/fl_sa_project}
+}
+```
+
+<!--
+After your first Zenodo release:
+  1. Replace XXXXXXX above with your actual DOI suffix.
+  2. Replace the author alias with your real name.
+  3. Uncomment the DOI badge at the top of this README.
+-->
+
+A `CITATION.cff` file is included so GitHub's "Cite this repository" button generates the citation automatically.
+
+---
+
 ## License
 
-This project is intended for academic and research purposes.
+This project is released under the [MIT License](LICENSE). You are free to use, modify, and distribute it for academic and commercial purposes, provided the copyright notice is preserved.
+
+---
+
+## Acknowledgments
+
+This work was developed as part of research on privacy-preserving federated learning for resource-constrained environments.

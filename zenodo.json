@@ -1,0 +1,29 @@
+{
+  "title": "FL-SA: A Modular Testbed for Federated Learning with Secure Aggregation",
+  "description": "<p>A modular testbed for <strong>Federated Learning (FL)</strong> enhanced with <strong>Secure Aggregation (SA)</strong>, enabling privacy-preserving model training across distributed edge and IoT devices. Raw data remains local while model updates are securely masked during aggregation.</p><p><strong>Features:</strong> pluggable cryptographic stacks (ASCON, PRESENT, AES-GCM), MQTT-based communication with mTLS security, Dockerized deployment, per-round performance metrics (latency, CPU, RAM, bandwidth), and a baseline FL mode for comparison.</p>",
+  "license": "MIT",
+  "upload_type": "software",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Cukur, Zakire",
+      "orcid": "0009-0008-3114-3502"
+    }
+  ],
+  "keywords": [
+    "federated learning",
+    "secure aggregation",
+    "privacy-preserving machine learning",
+    "lightweight cryptography",
+    "MQTT",
+    "edge computing",
+    "IoT security",
+    "intrusion detection"
+  ],
+  "communities": [
+    {
+      "identifier": "zenodo"
+    }
+  ],
+  "language": "eng"
+}
